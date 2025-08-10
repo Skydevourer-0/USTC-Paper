@@ -1893,7 +1893,7 @@
       \raggedleft\fangsong\fontsize{14bp}{14bp}\selectfont
       \null\ustc@secret@level\par}\par
     \vskip 0.5cm%
-    \includegraphics[height=1.3cm]{figures/ustc-name.pdf}\par
+    \includegraphics[height=1.3cm]{figures/ustc-name-stxingkai.pdf}\par
     \vskip 0.6cm%
     {\sffamily\fontsize{56bp}{56bp}\selectfont
       \ustc@thesis@name\par}%
