@@ -1,0 +1,25 @@
+@startuml 测试人员-查看告警信息
+
+left to right direction
+
+actor "测试人员" as User
+
+package "查看告警信息" <<Subsystem>> {
+    usecase "查看模块配置告警" as UC1
+    usecase "查看覆盖率告警" as UC2
+
+    package "模块配置告警" <<Subsystem>> {
+        usecase "查看文件未匹配模块告警" as UC1a
+        usecase "查看文件重复匹配模块告警" as UC1b
+        User --> UC1
+        UC1 --> UC1a
+        UC1 --> UC1b
+    }
+
+    package "覆盖率告警" <<Subsystem>> {
+        usecase "查看函数未覆盖告警" as UC2a
+        User --> UC2
+        UC2 --> UC2a
+    }
+}
+@enduml

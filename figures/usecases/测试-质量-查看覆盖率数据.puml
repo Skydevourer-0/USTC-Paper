@@ -1,0 +1,40 @@
+@startuml 测试-质量-查看覆盖率数据
+
+left to right direction
+
+actor "测试人员" as Tester
+actor "质量保证人员" as QA
+
+package "查看覆盖率数据" <<Subsystem>> {
+    usecase "查看全量覆盖率" as UC1
+    usecase "查看增量覆盖率" as UC2
+
+    package "全量覆盖率" <<Subsystem>> {
+        usecase "查看 单板分领域覆盖率" as UC1a <<time-related>>
+        usecase "查看 领域全模块覆盖率" as UC1b <<time-related>> 
+        usecase "查看 领域核心模块覆盖率" as UC1c <<time-related>> 
+        usecase "查看 覆盖率报告" as UC1d
+
+        Tester --> UC1
+        QA --> UC1
+        UC1 --> UC1a
+        UC1 --> UC1b
+        UC1 --> UC1c
+        UC1 --> UC1d
+    }
+
+    package "增量覆盖率" <<Subsystem>> {
+        usecase "查看 单板分领域增量覆盖率" as UC2a <<time-related>>
+        usecase "查看 领域全模块增量覆盖率" as UC2b <<time-related>>
+        usecase "查看 领域核心模块增量覆盖率" as UC2c <<time-related>>
+        usecase "查看 增量覆盖率报告" as UC2d
+
+        Tester --> UC2
+        QA --> UC2
+        UC2 --> UC2a
+        UC2 --> UC2b
+        UC2 --> UC2c
+        UC2 --> UC2d
+    }
+}
+@enduml

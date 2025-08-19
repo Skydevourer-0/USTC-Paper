@@ -1,0 +1,32 @@
+@startuml 测试视角-总体
+
+left to right direction
+
+actor "测试人员" as User
+
+package "多维度覆盖率融合显示系统" <<System>> {
+    package "POST 操作" <<Subsystem>> {
+        usecase "配置解析参数" as UC1a
+        usecase "上传覆盖率数据" as UC1b
+    }
+
+    package "GET 操作" <<Subsystem>> {
+        usecase "查看告警信息" as UC2a
+        usecase "查看覆盖率数据" as UC2b
+    }
+
+    usecase "上传数据" as UC1
+    usecase "获取数据" as UC2
+}
+
+' 用户与父用例交互
+User --> UC1
+User --> UC2
+
+' 父用例与子用例关系
+UC1 --> UC1a
+UC1 --> UC1b
+UC2 --> UC2a
+UC2 --> UC2b
+
+@enduml

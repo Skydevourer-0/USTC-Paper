@@ -1,0 +1,45 @@
+@startuml 测试人员-配置解析参数
+
+left to right direction
+
+actor "测试人员" as User
+
+package "配置解析参数" <<Subsystem>> {
+    usecase "配置基准节点" as UC1
+    usecase "配置管理员 ID" as UC2
+    User --> UC1
+    User --> UC2
+
+    package "排除信息" <<Subsystem>> {
+        usecase "配置排除文件" as UC3
+        usecase "配置排除函数" as UC4
+        usecase "配置待排除的函数名" as UC4a
+        usecase "配置排除时的扫描路径" as UC4b
+        User --> UC3
+        User --> UC4
+        UC4 --> UC4a
+        UC4 --> UC4b
+    }
+
+    package "模块信息" <<Subsystem>> {
+        usecase "配置模块信息" as UC5
+        usecase "配置领域名称" as UC5a
+        usecase "配置领域责任人" as UC5b
+        usecase "配置领域所含模块" as UC5c
+        User --> UC5
+        UC5 --> UC5a
+        UC5 --> UC5b
+        UC5 --> UC5c
+    }
+
+    package "二进制文件" <<Subsystem>> {
+        usecase "配置二进制文件（可选）" as UC6
+        usecase "配置压缩包路径（可选）" as UC6a
+        usecase "配置二进制文件路径" as UC6b
+        User --> UC6
+        UC6 --> UC6a
+        UC6 --> UC6b
+    }
+}
+
+@enduml
