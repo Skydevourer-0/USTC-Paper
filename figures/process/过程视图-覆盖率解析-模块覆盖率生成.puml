@@ -1,0 +1,31 @@
+@startuml 过程视图-覆盖率解析-模块覆盖率生成
+
+boundary "文件系统" as Files
+control "解析模块" as Parser
+database "数据库" as Database
+
+Parser -> Database: 查询模块信息
+activate Parser
+activate Database
+Database --> Parser: 返回模块信息
+deactivate Database
+Parser -> Parser: 解析模块信息，\n获取模块-文件映射和核心模块列表
+Parser -> Files: 获取全量覆盖率文件
+activate Files
+Files --> Parser: 提供 all.info
+deactivate Files
+
+Parser -> Parser: 通过 lcov --extract 从 all.info 中\n提取模块覆盖率数据 module.info
+Parser -> Parser: 筛选出核心模块的info，\n通过 lcov add 合并为 core.info
+
+Parser -> Parser: 通过 info 文件生成模块覆盖率报告
+Parser -> Files: 保存模块覆盖率报告
+deactivate Files
+
+Parser -> Parser: 解析模块覆盖率报告获取数据
+Parser -> Database: 保存模块覆盖率数据
+deactivate Database
+
+deactivate Parser
+
+@enduml

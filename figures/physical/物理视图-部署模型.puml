@@ -1,0 +1,45 @@
+@startuml 部署图
+
+node "用户主机" as user {
+    artifact "冒烟测试组件" as tester
+    artifact "覆盖率看板" as dashboard
+}
+
+node "目标硬件平台" as target {
+    node "控制面 (LinuxOS)" as control {
+        node "测试用例执行环境" as ct
+        artifact "覆盖率采集组件" as cc
+    }
+    node "数据面 (异构OS)" as dataplane {
+        node "测试用例执行环境" as dt
+        artifact "覆盖率采集组件" as dc
+    }
+    dc --> cc: 共享内存通信传输插桩统计数据
+}
+
+node "SmartCI 平台" as smartci {
+    node "流水线任务调度"
+}
+tester --> smartci: 冒烟测试流水线部署
+smartci --> target: 传输测试用例可执行文件
+cc --> smartci: 传输原始覆盖率数据文件
+
+node "应用服务器" as app {
+    node "Flask 应用服务" as service {
+        artifact "覆盖率解析组件" as analysis
+        artifact "静态文件系统" as static
+        analysis --> static: 存储覆盖率报告
+        analysis --> analysis: 覆盖率解析
+    }
+    static --> service: 读取覆盖率报告
+}
+
+node "数据库服务器" {
+    artifact "MySQL 数据库" as db
+}
+smartci --> service: 上传原始覆盖率数据文件
+analysis --> db: 存储覆盖率数据
+db --> service: 读取覆盖率数据
+service --> dashboard: 覆盖率可视化呈现
+
+@enduml

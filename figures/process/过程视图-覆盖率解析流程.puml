@@ -1,0 +1,64 @@
+@startuml 过程视图-覆盖率解析流程
+
+actor "用户" as User
+boundary "文件系统" as Files
+control "解析模块" as Parser
+boundary "解析工具" as Tools
+database "数据库" as Database
+
+User -> Parser: 上传覆盖率数据包和构建包（可选）
+activate Parser
+Parser -> Parser: 解压上传的文件
+Parser -> Files: 存储解压结果
+deactivate Files
+
+Parser -> Database: 查询解析参数
+activate Database
+Database --> Parser: 提供解析参数
+deactivate Database
+
+group LLVM 工具链
+    Parser -> Files: 读取覆盖率数据 .profraw
+    activate Files
+    Files --> Parser: 提供文件
+    deactivate Files
+    Parser -> Tools: 通过 llvm_profdata 工具合并 .profraw 文件
+    
+    activate Tools
+    Tools --> Parser: 提供合并后的 merged.raw
+    deactivate Tools
+
+    Parser -> Files: 根据解析参数读取二进制文件
+    activate Files
+    Files --> Parser: 提供二进制文件
+    deactivate Files
+
+    Parser -> Tools: 通过 llvm_cov 工具\n结合二进制文件从 .raw 导出覆盖率数据
+    activate Tools
+    Tools --> Parser: 提供导出结果 coverage.info
+    deactivate Tools
+end
+
+group GCC 工具链
+    Parser -> Files: 读取覆盖率数据 .gcda 和 .gcno
+    activate Files
+    Files --> Parser: 提供文件
+    deactivate Files
+
+    Parser -> Tools: 通过 lcov 导出覆盖率数据
+    activate Tools
+    Tools --> Parser: 提供导出结果 coverage.info
+    deactivate Tools
+end
+
+Parser -> Tools: 通过 genhtml 生成 HTML 报告
+activate Tools
+Tools --> Parser: 提供 coverage.info 生成的覆盖率报告
+deactivate Tools
+
+Parser -> Files: 存储覆盖率报告
+Parser -> Parser: 解析覆盖率报告，获取覆盖率数据
+Parser -> Database: 存储覆盖率数据
+deactivate Parser
+
+@enduml

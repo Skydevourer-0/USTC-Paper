@@ -1,0 +1,34 @@
+@startuml 过程视图-覆盖率采集流程
+
+actor "用户" as User
+boundary "用户主机" as Host
+control "交叉编译工具链" as Compiler
+box "目标硬件平台"
+    control "控制面(LinuxOS)" as CtrlPlane
+    control "数据面(异构OS)" as DataPlane
+end box
+
+User -> Compiler: 准备交叉编译工具链
+User -> Host: 编写测试用例
+
+activate Host
+Host -> Compiler: 启用覆盖率选项\n编译测试用例
+activate Compiler
+Compiler --> Host: 返回构建包和可执行文件
+deactivate Compiler
+
+Host -> DataPlane: 传输可执行文件到硬件平台（数据面）
+activate DataPlane
+Host -> CtrlPlane: 传输可执行文件到硬件平台（控制面）
+activate CtrlPlane
+DataPlane -> DataPlane: 执行测试用例\n采集插桩统计信息
+DataPlane -> CtrlPlane: 共享内存通信\n传输统计信息
+deactivate DataPlane
+CtrlPlane -> CtrlPlane: 执行测试用例\n采集插桩统计信息
+CtrlPlane -> CtrlPlane: 汇总插桩统计信息\n生成覆盖率数据文件
+CtrlPlane --> Host: 返回覆盖率数据文件到用户主机
+deactivate CtrlPlane
+deactivate Host
+
+
+@enduml

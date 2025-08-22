@@ -1,0 +1,39 @@
+@startuml 过程视图-覆盖率可视化流程
+
+actor "用户" as User
+control "前端系统" as Frontend
+control "后端系统" as Backend
+database "数据库" as Database
+boundary "静态文件系统" as Static
+
+' 用户请求查看覆盖率数据
+User -> Frontend: 请求查看覆盖率数据
+activate User
+activate Frontend
+
+Frontend -> Backend: 调用接口获取覆盖率数据
+activate Backend
+Backend -> Database: 查询覆盖率数据
+activate Database
+Database --> Backend: 返回覆盖率数据
+deactivate Database
+Backend --> Frontend: 返回覆盖率数据
+deactivate Backend
+
+Frontend -> Frontend: 构造表格和柱状图，生成告警信息
+Frontend --> User: 展示覆盖率数据
+deactivate Frontend
+
+' 用户请求查看覆盖率报告
+User -> Frontend: 请求查看覆盖率报告
+activate Frontend
+Frontend -> Frontend: 构造覆盖率报告的 URL
+Frontend -> Static: 通过 URL 请求覆盖率报告
+activate Static
+Static --> Frontend: 返回覆盖率报告
+deactivate Static
+Frontend --> User: 展示覆盖率报告
+deactivate Frontend
+deactivate User
+
+@enduml

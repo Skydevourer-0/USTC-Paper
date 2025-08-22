@@ -1,0 +1,39 @@
+@startuml 过程视图-覆盖率解析-增量覆盖率生成
+
+boundary "文件系统" as Files
+control "解析模块" as Parser
+database "数据库" as Database
+
+Parser -> Database: 查询基准节点和当前节点的 commit id
+activate Parser
+activate Database
+Database --> Parser: 返回基准节点和当前节点的 commit id
+deactivate Database
+Parser -> Files: 获取全量覆盖率文件
+activate Files
+Files --> Parser: 提供 all.info
+deactivate Files
+
+Parser -> Parser: 通过字符串匹配获取 all.info 中的文件名列表
+Parser -> Parser: 通过前缀匹配计算所有文件的最近公共祖先
+
+Parser -> Parser: 通过 git diff 命令获取两个 commit 之间\n上述祖先目录之间的代码差异
+Parser -> Files: 将目录的代码差异保存为 dir.diff 文件
+
+Parser -> Files: 获取 dir.diff 和 all.info 文件
+activate Files
+Files --> Parser: 提供文件
+deactivate Files
+Parser -> Parser: 逐行读取 dir.diff 文件，\n解析出新增的代码行号和函数名
+Parser -> Parser: 逐行读取 all.info 文件，\n筛选增量的代码行和函数的覆盖率记录，\n得到增量覆盖率 diff.info
+Parser -> Parser: 通过 diff.info 生成增量覆盖率报告
+Parser -> Files: 保存增量覆盖率报告
+deactivate Files
+
+Parser -> Parser: 解析增量覆盖率报告获取数据
+Parser -> Database: 保存增量覆盖率数据
+deactivate Database
+
+deactivate Parser
+
+@enduml

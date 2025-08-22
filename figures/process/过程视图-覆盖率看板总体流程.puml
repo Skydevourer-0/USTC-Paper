@@ -1,0 +1,68 @@
+@startuml 过程视图-覆盖率看板总体流程
+actor "用户" as User
+boundary "测试环境" as Tester
+control "前端系统" as Page
+control "后端系统" as Parser
+database "数据库" as Database
+boundary "静态文件系统" as Static
+
+User -> Page: 配置解析参数
+activate User
+activate Page
+Page -> Parser: 调用接口“配置解析参数”
+activate Parser
+Parser -> Database: 存储解析参数
+activate Database
+Database --> Parser: 返回 SQL 结果
+deactivate Database
+Parser --> Page: 返回配置结果
+deactivate Parser
+Page --> User: 提示用户配置成功或失败
+deactivate Page
+deactivate User
+
+User -> Tester: 编写测试用例
+activate User
+activate Tester
+Tester -> Tester: 交叉编译测试用例\n获取构建包
+Tester -> Tester: 执行测试用例\n获取覆盖率数据文件
+Tester --> User: 返回覆盖率数据文件和构建包 
+deactivate Tester
+
+User -> Parser: 上传覆盖率数据和构建包（可选）
+activate Parser
+Parser -> Database: 查询解析参数
+activate Database
+Database --> Parser: 提供解析参数
+deactivate Database
+Parser -> Parser: 解析覆盖率数据
+Parser -> Database: 存储覆盖率数据
+activate Database
+Database --> Parser: 返回 SQL 结果
+deactivate Database
+Parser -> Static: 存储覆盖率报告
+Parser --> User: 提示用户解析成功或失败
+deactivate Parser
+deactivate User
+
+User -> Page: 查看覆盖率数据
+activate User
+activate Page
+Page -> Parser: 调用接口“查询解析结果”
+activate Parser
+Parser -> Database: 查询覆盖率数据
+activate Database
+Database --> Parser: 提供覆盖率数据
+deactivate Database
+Parser --> Page: 返回覆盖率数据
+deactivate Parser
+
+Page -> Static: 获取覆盖率报告文件
+activate Static
+Static --> Page: 提供覆盖率报告文件
+deactivate Static
+Page -> Page: 构造可视化界面
+Page --> User: 覆盖率数据可视化呈现
+deactivate Page
+deactivate User
+@enduml
