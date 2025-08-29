@@ -1,0 +1,30 @@
+@startuml 功能模块交互-自动触发流程
+
+actor "用户" as User
+
+participant "SmartCI 平台" as SmartCI
+participant "覆盖率采集模块" as Collector
+participant "覆盖率解析模块" as Parser
+participant "数据存储模块" as Storage
+
+' 流程开始
+User -> SmartCI : 触发冒烟测试任务
+activate SmartCI
+SmartCI -> Collector : 分发测试任务\n并触发覆盖率采集任务
+deactivate SmartCI
+activate Collector
+Collector -> Collector : 数据面和控制面\n各自采集覆盖率数据
+Collector -> Collector : 数据面通过共享内存通信\n将数据传输至控制面
+Collector -> Collector: 控制面汇总所有数据\n生成覆盖率数据文件
+Collector -> Collector: 将原始覆盖率数据文件\n存储至特定目录
+Collector -> SmartCI : 触发覆盖率解析任务
+deactivate Collector
+activate SmartCI
+SmartCI -> Parser : 分发覆盖率解析任务
+deactivate SmartCI
+activate Parser
+Parser -> Parser: 从特定目录中\n读取原始覆盖率数据文件
+Parser -> Parser : 解析覆盖率数据\n计算细粒度覆盖率数据
+Parser -> Storage : 存储解析结果到数据库\n生成报告存储至文件系统
+deactivate Parser
+@enduml

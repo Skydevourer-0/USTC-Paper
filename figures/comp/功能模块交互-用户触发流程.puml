@@ -1,0 +1,42 @@
+@startuml 功能模块交互-用户触发流程
+
+actor "用户" as User
+
+participant "覆盖率可视化模块" as Dashboard
+participant "SmartCI 平台" as SmartCI
+participant "覆盖率解析模块" as Parser
+participant "数据存储模块" as Storage
+
+
+User -> Dashboard: 上传原始覆盖率数据\n配置解析参数
+activate Dashboard
+Dashboard -> SmartCI: 触发覆盖率解析任务
+activate SmartCI
+SmartCI -> Parser: 分发解析任务
+deactivate SmartCI
+activate Parser
+Parser -> Parser: 执行解析任务
+
+loop 轮询任务状态
+    Dashboard -> SmartCI: 查询覆盖率解析任务状态
+    SmartCI --> Dashboard: 返回状态 \n(success / failed / running)
+    
+    note right of Dashboard:-running:  继续轮询\n-success/failed:  结束轮询
+end
+
+
+Parser -> Storage: 存储解析结果
+deactivate Parser
+
+alt 解析任务 success
+    Dashboard -> Storage: 查询最新数据
+    activate Storage
+    Storage --> Dashboard: 返回数据和报告
+    deactivate Storage
+    Dashboard -> User: 更新可视化界面
+else 解析任务 failed
+    Dashboard -> User: 提示任务失败
+    deactivate Dashboard
+end
+
+@enduml

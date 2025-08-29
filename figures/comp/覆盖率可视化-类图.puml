@@ -1,0 +1,55 @@
+@startuml 覆盖率可视化-类图
+skinparam linetype ortho
+
+package "覆盖率可视化模块" {
+
+  ' ---- View 层 ----
+  class ConfigView {
+    + configureParams()
+    + uploadFile()
+    + triggerAnalysis()
+  }
+
+  class ChartView {
+    + selectDimension()
+    + renderCoverage()
+  }
+
+  ' ---- Component 层 ----
+  class AlarmList {
+    + showAlarms()
+  }
+
+  class CoverageTable {
+    + showStructuredData()
+  }
+
+  class CoverageBarChart {
+    + showBarChart()
+    + onBarClick()
+  }
+
+  class FilterPanel {
+    + chooseDimension()
+    + confirmSelection()
+  }
+
+  ' ---- 状态管理 ----
+  class VuexStore {
+    - state
+    - getters
+    - mutations
+    - actions
+  }
+
+  ' ---- 关系 ----
+  ConfigView --> VuexStore : 使用状态/调用action
+  ChartView --> VuexStore : 使用状态/调用action
+
+  ChartView o-- AlarmList
+  ChartView o-- CoverageTable
+  ChartView o-- CoverageBarChart
+  ChartView o-- FilterPanel
+
+}
+@enduml

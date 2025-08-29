@@ -1,0 +1,42 @@
+@startuml 覆盖率采集-数据采集子模块
+
+class DataPlane {
+  - exec_file: string
+  + execute()
+  + write_frame()
+}
+
+class ControlPlane {
+  - exec_file: string
+  - gcno_files: list
+  + execute()
+  + read_frame()
+  + merge_frames()
+  + package_coverage()
+}
+
+class SharedMemory {
+  - buffers: list<ShmFrame>
+  - num_buffers: int
+  + publish_frame(frame: ShmFrame)
+  + fetch_frame(): ShmFrame
+}
+
+class ShmFrame {
+  - header: ShmHdr
+  - payload: byte[]
+}
+
+class ShmHdr {
+  - magic: uint32_t
+  - toolchain: uint8_t
+  - flags: uint8_t
+  - payload_len: uint32_t
+  - crc32: uint32_t
+}
+
+DataPlane --> SharedMemory : uses
+ControlPlane --> SharedMemory : uses
+SharedMemory "1" *-- "*" ShmFrame
+ShmFrame "1" *-- "1" ShmHdr
+@enduml

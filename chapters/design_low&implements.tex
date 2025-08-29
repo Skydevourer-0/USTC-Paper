@@ -1,0 +1,925 @@
+% !TeX root = ../main.tex
+% 系统详细设计与实现
+
+\chapter{系统详细设计与实现}
+本章对多维度覆盖率融合显示系统的详细设计与实现进行阐述。在概要设计的基础上，进一步细化各功能模块的结构与处理流程，明确关键数据结构和接口定义，并结合实际开发环境说明实现要点。
+
+\section{系统整体设计与实现}
+本系统采用模块化设计思想，将覆盖率采集、分析、可视化与存储环节进行解耦，每个模块保持高内聚、低耦合，从而保证系统的可扩展性与可维护性。
+
+\subsection{功能模块划分}
+系统整体架构分为四个主要功能模块，并通过 SmartCI 平台 与冒烟测试流水线集成，实现覆盖率数据从采集到展示的全流程自动化处理。
+
+\begin{itemize}
+    \item \textbf{覆盖率采集模块}：负责与冒烟测试流水线集成，实时收集测试运行过程中的覆盖率数据。支持多种交叉编译工具链（如 LLVM 与 GCC），保证不同构建环境下覆盖率数据的一致性。
+    \item \textbf{细粒度分析模块}：负责对采集到的覆盖率数据进行多维度处理。支持按单板、领域、模块等多个维度进行统计，计算增量覆盖率，并提供多时间点的覆盖率对比与趋势分析功能。
+    \item \textbf{覆盖率可视化模块}：负责通过前端交互界面展示覆盖率结果，提供分层次、多维度的可视化视图（柱状图、趋势图、覆盖率报告），帮助用户快速洞察覆盖率分布与变化情况。
+    \item \textbf{数据存储模块}：负责持久化存储覆盖率数据及生成的分析报告。数据库用于存储结构化覆盖率数据，静态文件系统用于存放生成的覆盖率报告，确保数据的长期可追溯性和可复用性。
+    \item \textbf{SmartCI 集成}：负责将覆盖率采集、分析与可视化模块嵌入现有 SmartCI 冒烟测试流水线，实现任务自动调度和分布式执行，确保覆盖率功能与测试流程的无缝集成。
+\end{itemize}
+
+\subsection{功能模块交互}
+为了清晰展示系统各功能模块之间的交互逻辑，本系统采用时序图对不同触发方式下的数据流和控制流进行了描述。功能模块交互可分为三类场景：流水线自动触发覆盖率采集与解析，用户在可视化界面手动触发解析，以及用户查看覆盖率可视化界面。
+
+\subsubsection{自动触发流程}
+流水线自动触发覆盖率采集和解析的流程如图~\ref{fig:5.1}所示。
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{comp/功能模块交互-自动触发流程.pdf}
+    \caption{功能模块交互-自动触发流程时序图}
+    \label{fig:5.1}
+\end{figure}
+
+在该场景下，当用户触发冒烟测试任务后，SmartCI 平台负责调度任务并触发覆盖率采集模块执行相应操作。采集模块在数据面和控制面分别采集覆盖率数据，数据面通过共享内存将数据传输至控制面进行汇总，生成原始覆盖率数据文件，并存储在指定目录中。完成覆盖率采集后，触发解析任务，SmartCI 平台将解析任务分发给覆盖率解析模块。解析模块读取原始数据文件，进行覆盖率解析并计算细粒度覆盖率数据，最终将解析结果存储到数据库，并生成报告保存至文件系统。该流程体现了系统自动化、实时采集与处理的特点，有效保障了覆盖率数据的完整性和即时性。
+
+\subsubsection{用户触发流程}
+用户手动触发覆盖率解析的流程如图~\ref{fig:5.2}所示。系统支持用户手动上传覆盖率采集到的原始覆盖率数据文件，触发覆盖率解析。
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{comp/功能模块交互-用户触发流程.pdf}
+    \caption{功能模块交互-用户触发流程时序图}
+    \label{fig:5.2}
+\end{figure}
+
+在该场景下，用户上传原始覆盖率数据并配置解析参数后，覆盖率可视化模块将解析任务提交给 SmartCI 平台，由其分发至覆盖率解析模块执行。在解析任务执行期间，可视化模块轮询 SmartCI 平台查询解析任务的状态，直至解析任务完成。若解析成功，可视化模块查询数据存储模块获取最新数据与报告，并构建可视化界面呈现给用户；若解析失败，则提示用户任务失败。该机制体现了系统对用户主动操作的响应能力，增强了用户按需分析覆盖率数据的灵活性，并为未来扩展开发个人级覆盖率分析功能提供了可行的技术基础。
+
+\subsubsection{用户查看数据}
+用户查看覆盖率可视化界面的流程如图~\ref{fig:5.3}所示。系统将覆盖率可视化呈现和其他功能模块解耦，提供了更灵活的用户界面。
+
+在该场景下，用户在日常查看覆盖率结果时，可直接通过覆盖率可视化模块构造的前端页面访问覆盖率看板。可视化模块独立于覆盖率采集模块和覆盖率解析模块，通过查询数据存储模块获取最新覆盖率数据与覆盖率报告，完成可视化界面的构建与呈现。该设计使用户能够随时按需访问和分析覆盖率信息，而无需依赖其他模块的执行状态，同时保证了可视化呈现的实时性和一致性。
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.6\textwidth]{comp/功能模块交互-用户查看数据.pdf}
+    \caption{功能模块交互-用户查看数据时序图}
+    \label{fig:5.3}
+\end{figure}
+    
+\section{覆盖率采集模块设计与实现}
+覆盖率采集模块是系统获取原始覆盖率数据的核心组件，其设计目标是从测试用例源码出发，经交叉编译、构建、部署与执行，最终得到可用于后续解析处理的原始覆盖率文件。根据功能划分为以下三个子模块：交叉编译子模块，数据传输子模块，数据采集子模块。
+
+\subsection{交叉编译子模块}
+该子模块负责将用户主机的测试用例源码通过 LLVM 或 GCC 工具链进行交叉编译。在编译过程中，编译选项中开启覆盖率采集功能，使生成的目标文件和最终可执行程序中嵌入覆盖率插桩代码以统计运行时覆盖率。编译流程通常包括以下几个阶段：
+\begin{enumerate}
+    \item 将目录中的所有测试用例源文件交叉编译为目标文件（\verb|.o|）并生成中间产物（如 GCC 的 \verb|.gcno| 文件，LLVM 的动态链接库、可重定位对象文件等）。
+    \item 通过链接过程将所有目标文件整合为一个可执行文件。
+    \item 最后通过 Makefile 将中间产物打包，形成构建包。
+\end{enumerate}
+
+交叉编译子模块主要通过 Makefile 文件来组织整个编译行为，其伪代码如算法~\ref{algo:5.1}所示。
+
+\begin{algorithm}[ht]
+\caption{覆盖率采集-交叉编译子模块伪代码}
+\label{algo:5.1}
+    \KwIn{测试用例源码目录 \texttt{SRC\_DIR}}
+    \KwOut{构建包 \texttt{BUILD\_PACKAGE} 和可执行文件 \texttt{EXEC\_FILE}}
+
+    遍历 \texttt{SRC\_DIR} 下所有 .c 文件，生成源文件列表 \texttt{SRC\_LIST}\;
+    初始化目标文件列表 \texttt{OBJ\_LIST}\;
+    \For{每个源文件 \texttt{src} in \texttt{SRC\_LIST}}{ 
+        使用交叉编译工具链 (GCC 或 LLVM) 编译 \texttt{src} 为目标文件 \texttt{obj}，同时生成插桩文件\; 将 \texttt{obj} 添加到 \texttt{OBJ\_LIST}\; 
+    }
+    链接 \texttt{OBJ\_LIST} 生成可执行文件 \texttt{EXEC\_FILE}\;
+    将所有中间产物，如 GCC 的 \texttt{.gcno}，LLVM 的动态链接库和可重定位对象文件等，打包为构建包 \texttt{BUILD\_PACKAGE}\;
+    输出 \texttt{EXEC\_FILE} 和 \texttt{BUILD\_PACKAGE}，准备传输到目标硬件平台\;
+\end{algorithm}
+
+以 ARM 32 位 Linux 系统、使用硬件浮点和 EABI 约定的平台为例，GCC工具链和LLVM工具链生成目标文件的指令如下：
+
+\begin{lstlisting}[language=bash, basicstyle=\ttfamily\small, breaklines=true, breakindent=2em, frame=tb]
+# GCC
+arm-linux-gnueabihf-gcc --coverage [-fprofile-info-section] -O0 -g source.c -o output.o
+
+# Clang/LLVM
+clang --target=arm-linux-gnueabihf -fprofile-instr-generate -fcoverage-mapping -O0 -g source.c -o output.o
+\end{lstlisting}
+
+其中 \verb|arm-linux-gnueabihf| 表示目标平台；\verb|-O0| 表示不进行优化编译，避免源代码错位，\verb|-g| 表示调试信息生成，在目标文件中嵌入调试符号，使得最终的覆盖率信息包含函数名等调试信息，而剩余的选项则表示启用覆盖率编译，自动插入插桩代码以统计运行时覆盖率。注意到，\verb|-fprofile-info-section| 选项是编译数据面使用的测试用例独有的选项，它能避免可执行文件默认的将覆盖率数据写入磁盘的行为。
+
+\subsection{数据传输子模块}  
+数据传输子模块负责主机与目标硬件平台之间的双向文件传输。一方面，将交叉编译生成的可执行文件和构建包传输至目标硬件平台；另一方面，在测试执行完成后，将原始覆盖率数据文件传回主机，以供后续解析和分析。
+
+模块采用轻量级且跨平台的传输方式 FTP协议进行数据传输，确保数据完整性和可靠性。具体设计包括：
+\begin{itemize}
+    \item \textbf{数据上传}：将可执行文件传至目标平台，上传完成后返回状态。
+    \item \textbf{数据下载与整合}：测试执行完成后，模块从目标硬件平台获取生成的原始覆盖率数据文件，并进行必要的整理与合并。对于 GCC 工具链，\verb|.gcda| 文件需与对应的 \verb|.gcno| 文件一并处理，保持目录结构一致，因此将\verb|.gcno| 压缩到下载的文件中，作为完整的原始覆盖率数据包。整合后的数据被打包并存储至主机端指定目录，为后续解析模块提供统一、规范的数据输入。
+    \item \textbf{错误处理}：传输失败时支持重试机制，并记录日志以便追踪。
+\end{itemize}
+
+通过以上设计，数据传输模块能够可靠地完成跨平台文件交互，支撑覆盖率采集与解析的整体流程。
+
+\subsection{数据采集子模块}  
+数据采集子模块是覆盖率采集模块的核心，负责在目标硬件平台的数据面和控制面上同时执行测试用例可执行文件，并实时收集覆盖率信息。
+
+\subsubsection{类结构设计}
+数据采集子模块的类结构设计如图~\ref{fig:5.4}\footnote{为遵循保密策略，图示类图为概念性表示，省略了具体实现细节。文中后续涉及的类图亦采用同样的抽象处理方式，不再重复说明。}所示。该设计采用数据面（DataPlane）和控制面（ControlPlane）双主体结构，并通过共享内存（SharedMemory）进行数据交互，实现了跨工具链和无文件系统环境下的覆盖率采集。
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.5\textwidth]{comp/覆盖率采集-数据采集子模块.pdf}
+    \caption{覆盖率采集-数据采集子模块类图}
+    \label{fig:5.4}
+\end{figure}
+
+\paragraph{数据面（DataPlane）}
+数据面负责在异构OS中执行可执行文件\verb|exec_file|，收集覆盖率信息，并通过 \verb|write_frame()| 方法将覆盖率字节流按帧写入共享内存。数据面直接依赖于 \verb|SharedMemory| 对象，实现生产者角色。
+
+\paragraph{控制面（ControlPlane）}
+控制面负责在LinuxOS中执行覆盖率收集任务，并从共享内存中读取数据面传输的覆盖率数据，最终整合到一个覆盖率数据包中。其主要方法包括 \verb|read_frame()|，\verb|merge_frames()| 和 \verb|package_coverage()|，能够将共享内存中的覆盖率字节流增量合并为完整的覆盖率文件，并与控制面本地采集的数据打包输出。控制面同样依赖 \verb|SharedMemory| 对象，实现消费者角色。
+
+\paragraph{共享内存类（SharedMemory）}
+\verb|SharedMemory| 管理若干缓冲帧（\verb|ShmFrame|），其中每个缓冲帧包含帧头（\verb|ShmHdr|）和负载（\verb|payload|）两部分，帧头用于标识工具链类型、状态标志、负载长度以及校验信息。该类提供 \verb|publish_frame(frame)| 和 \verb|fetch_frame()| 接口供数据面和控制面读写。通过这种设计，数据传输以帧为单位进行，确保数据面与控制面之间的严格串行交互。
+
+\paragraph{缓冲帧与帧头（ShmFrame / ShmHdr）}
+\verb|ShmFrame| 组合 帧头\verb|header| 和 负载 \verb|payload|，其中帧头通过 \verb|ShmHdr| 实现，其字段包括魔数（\verb|magic|）、工具链标识（\verb|toolchain|）、状态标志（\verb|flags|）、负载长度（\verb|payload_len|）以及 CRC 校验码（\verb|crc32|）。该设计为共享内存传输提供完整的元信息和数据完整性保障。具体的共享内存协议详见~\ref{sec:5.2.4}节。
+
+\subsubsection{覆盖率采集算法}
+目标硬件平台数据面和控制面的具体采集方法如下：
+
+\begin{itemize}
+    \item 数据面：在异构操作系统环境中执行可执行文件，同时在每个测试用例执行完成后，拦截插桩统计数据，在覆盖率文件生成前，将内容转化为字节流，通过共享内存缓冲区传输至控制面。采集方法如算法~\ref{algo:5.2}所示。
+    \item 控制面：在 Linux 环境中执行可执行文件，对共享内存中的字节流进行读取，并将其与自身采集到的覆盖率数据整合，生成完整的覆盖率数据文件。采集方法如算法~\ref{algo:5.3}所示。
+\end{itemize}
+
+\begin{algorithm}[ht]
+\caption{覆盖率采集-数据采集子模块（数据面方法）}
+\label{algo:5.2}
+\KwIn{可执行文件 \texttt{EXEC\_FILE}, 共享内存缓冲区 \texttt{SHM}}
+\KwOut{覆盖率字节流写入 \texttt{SHM}}
+
+执行 \texttt{EXEC\_FILE}\;
+\uIf{工具链为 LLVM}{
+    导出符号 \texttt{\_\_llvm\_profile\_runtime} 避免静态初始化行为\; 
+    执行 \texttt{EXEC\_FILE}\;
+    调用 \texttt{\_\_llvm\_profile\_get\_size\_for\_buffer()} 总字节数\; 
+    将数据切片，调用 \texttt{\_\_llvm\_profile\_write\_buffer()} 按帧写入共享内存 \texttt{SHM}，最后一帧标记结束\;
+}\ElseIf{工具链为 GCC}{
+    执行 \texttt{EXEC\_FILE}\; 
+    自定义 \texttt{dump()} 方法，能够将覆盖率数据转化为字节流并按帧写入\texttt{SHM}\; 
+    调用 \texttt{\_\_gcov\_info\_to\_gcda} 方法实现覆盖率数据写入共享内存，其中调用了之前自定义的 \texttt{dump()} 方法，注意最后一帧标记结束\;
+}
+\end{algorithm}
+
+\begin{algorithm}[ht]
+\caption{覆盖率采集-数据采集子模块（控制面方法）}
+\label{algo:5.3}
+\KwIn{共享内存缓冲区 \texttt{SHM}, 本地 \texttt{.gcno} 文件（GCC）}
+\KwOut{完整覆盖率数据文件 \texttt{COVERAGE\_PACKAGE}}
+
+执行 \texttt{EXEC\_FILE}采集控制面覆盖率数据文件\;
+\While{未接收到结束帧}{
+  从共享内存 \texttt{SHM} 读取一帧字节流\;
+  \uIf{工具链为 LLVM}{
+    将字节流追加写入到 \texttt{.profraw}\;
+  }\ElseIf{工具链为 GCC}{
+    调用 \texttt{merge\_stream()} 将字节流增量重建为 \texttt{.gcda}\;
+  }
+}
+将数据面和控制面覆盖率数据文件打包为 \texttt{COVERAGE\_PACKAGE}\;
+输出 \texttt{COVERAGE\_PACKAGE}\;
+\end{algorithm}
+
+\paragraph{LLVM 工具链}
+在LLVM工具链下，LLVM 编译器自带的覆盖率 runtime 会在可执行文件或共享库加载时，通过静态初始化器做两件事：首先确定覆盖率输出路径（\verb|LLVM_PROFILE_FILE| 环境变量）。其次，注册写入函数，用于将覆盖率数据写入文件。即默认情况下，LLVM runtime 会自动在程序开始运行时设置好输出路径，并在程序结束时把 profile 写入磁盘。
+
+而在数据面无文件系统条件下，不存在能够写入的文件地址，因此需要禁用上述静态初始化器。算法通过导出符号 \verb|__llvm_profile_runtime|，使得链接器看到这个符号已经定义，从而跳过默认的静态初始化。接着，调用 \verb|__llvm_profile_get_size_for_buffer()| 计算覆盖率数据的总大小。由于共享内存帧的大小固定，文件总大小即可推算出完整传输所需的帧数。随后，程序调用 \verb|__llvm_profile_write_buffer()| 生成覆盖率数据，并按帧切片写入共享内存缓冲区。对于最后一帧，额外置结束标记 FIN，以表示传输的终止。
+
+接着是控制面的算法。轮询共享内存帧，当检测到新的数据帧到达时，即可读取并将其内容追加写入到本地的 \verb|.profraw| 文件中。该过程严格遵循帧序列，确保覆盖率数据按顺序完整写入。最终，当接收到标记为 FIN 的数据时，本轮数据采集结束。
+
+\paragraph{GCC 工具链}
+在GCC工具链下，默认情况下会在每个翻译单元的析构函数处自动将覆盖率数据写入 \verb|.gcda| 文件。
+
+在数据面无文件系统条件下，需要禁用上述过程。GCC 需要在交叉编译时选择一个额外的编译选项\verb|-fprofile-info-section| 将统计信息保存在可执行文件的特定 section 中，与此前存储位置不同，避免了析构函数将覆盖率数据写入文件。然后，修改链接过程，使用链接器在连续的内存块中收集来自可执行文件所有翻译单元的指向 gcov 信息的指针。使用如下链接器脚本来实现该过程。
+
+\begin{lstlisting}[language=c, basicstyle=\ttfamily\small, breaklines=true, breakindent=2em, frame=tb]
+.gcov_info :
+{
+  PROVIDE (__gcov_info_start = .);
+  KEEP (*(.gcov_info))
+  PROVIDE (__gcov_info_end = .);
+}
+\end{lstlisting}
+
+通过上述脚本，链接器将提供两个全局符号 \verb|__gcov_info_start| 和 \verb|__gcov_info_end| ，它们分别定义指向 gcov 信息块的指针数组的起始和结束。需要 \verb|KEEP| 指令来防止指针的垃圾回收。
+
+此时，实现 \verb|dump()| 方法，能够将字节流写入共享内存；实现一个 \verb|filename| 方法，能够通过 \verb|__gcov_filename_to_gcfn()| 函数将文件名序列化为 gcfn 数据流，控制面中的合并方法 \verb|merge-stream| 使用 gcfn 数据来找出与 gcov 信息关联的文件名。最后实现方法，从\verb|__gcov_info_start| 和 \verb|__gcov_info_end|中提取数据，调用 \verb|__gcov_info_to_gcda()|，利用之前定义的两个方法，将覆盖率数据字节流按帧传输到共享内存缓冲区中。该方法的核心逻辑代码如下：
+
+\begin{lstlisting}[language=c, basicstyle=\ttfamily\small, breaklines=true, breakindent=2em, frame=tb]
+const struct gcov_info *const *info = __gcov_info_start;
+const struct gcov_info *const *end = __gcov_info_end;
+
+while (info != end) {
+    void *arg = NULL;
+    __gcov_info_to_gcda (*info, filename, dump, arg);
+    ++info;
+}
+\end{lstlisting}
+
+控制面中，按帧收到覆盖率数据字节流时，通过 \verb|gcov-tool| 的子命令 \verb|merge_stream| 增量构造为 \verb|.gcda| 文件。
+
+\subsection{共享内存通信协议}\label{sec:5.2.4}
+为解决数据面与控制面之间的高效、可靠数据传输问题，本系统采用基于共享内存的帧协议与双缓冲状态机来实现跨OS通信。
+
+\subsubsection{协议概览}
+协议将传输数据划分为若干帧，每帧包含一个固定格式的头部与可变长度的负载。生产者（数据面）按帧写入共享内存，写入完成后通过原子状态切换与内存栅栏告知消费者（控制面）读取；消费者按帧读取并处理，遇到最后一帧后结束本次传输。为提高并发性和鲁棒性，采用双缓冲轮换策略并使用简单的状态机避免读写冲突。
+
+\subsubsection{共享内存帧结构}
+在共享内存区分配两个缓冲块，每块由头部和负载构成。帧头结构字段如表{tab:5.1}所示。
+
+\begin{table}
+  \centering
+  \caption{覆盖率采集-共享内存帧头结构}
+  \label{tab:5.1}
+  \begin{tabular}{lllll}
+    \toprule
+    字段 & 类型 & 长度（bit） & 含义 & 取值示例 \\
+    \midrule
+    \verb|magic| & \verb|uint32_t| & 32 & 魔数，用于校验 & 0xC0DECAFE \\
+    \verb|toolchain| & \verb|uint8_t| & 8 & 工具链标识 & 0=GCC, 1=LLVM\\
+    \verb|flags| & \verb|uint8_t| & 8 & 状态标志位& 0x010\\
+    \verb|payload_len| & \verb|uint32_t| & 32 & 负载字节数 & 128 \\
+    \verb|crc32| & \verb|uint32_t| & 32 & 对数据帧的校验 & ... \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+其中，状态标志位中 前两位 表示准备状态，共4个状态，\verb|EMPTY|，\verb|READY|，\verb|WRITING|，\verb|READING|；第三位表示结束状态；其他位保留。校验时，通过 \verb|magic| 字段校验帧头是否正确传输，通过 \verb|crc32| 字段校验负载是否正确传输。每个缓冲块在共享内存中按 帧头+负载 布局排列。头部长度按照缓存行对齐，并保证负载紧接其后。整个共享内存区按页对齐，且缓冲块大小为页的整数倍以便 mmap/映射管理。
+
+\subsubsection{状态机与同步语义}
+采用双缓冲并配合每个帧的状态位来管理读写流程。生产者与消费者的交互约定如下：
+
+\begin{enumerate}
+  \item 生产者在写一帧前先原子地把某缓冲块状态 READY 位从 \texttt{EMPTY} 置为 \texttt{WRITING}，写入头部与 payload，执行内存写屏障并做缓存清理，最后把状态置为 \texttt{READY}。
+  \item 消费者等待某块状态为 \texttt{READY}，将其置为 \texttt{READING}，执行缓存失效/内存读屏障，读取头部与 payload 并处理，处理完成后把状态置回 \texttt{EMPTY}。
+  \item 每帧头部的 \texttt{flags.FIN} 即第三位表示是否为最后一帧，消费者在处理到 FIN 位为 1 的一帧后终止本次传输循环。
+\end{enumerate}
+
+采用双缓冲方案，消除了读写两端的等待阻塞，避免生产被消费阻塞。同时，通过这样的生产-消费约定可以消除竞态：生产者只写处于 \texttt{EMPTY} 的缓冲，消费者只读处于 \texttt{READY} 的缓冲，避免了乱序写入；其中状态变更通过原子操作和内存屏障保证跨核/跨 OS 可见性。
+
+\subsubsection{内存映射}
+共享内存的建立方式由平台确定：在 Linux 控制面可使用 \texttt{mmap}/\texttt{shm\_open}，在嵌入式数据面调用板级支持包的接口，保证两端映射到相同物理地址。
+
+\subsubsection{缓存一致性}
+在异构操作系统架构中，数据面与控制面通过共享内存通信时，必须保证缓存一致性，以避免读到旧数据。  
+
+为此，生产者在发布数据前会刷新缓存并执行内存写屏障；消费者在读取数据前会刷新缓存并执行内存读屏障。通过内存屏障，避免跨OS的内存读写操作乱序。具体操作封装为平台抽象接口，以屏蔽不同 CPU 架构和操作系统的差异。
+
+\subsubsection{异常处理策略}
+协议定义如下异常处理策略：
+
+\begin{itemize}
+  \item \textbf{超时检测}：控制面在等待 \texttt{READY} 超过超时阈值时，记录警告；在指数退避的重试策略后，若尝试次数达到重试阈值，抛出异常，向上层报告。
+  \item \textbf{缓冲占用}：若数据面连续写满两个缓冲（双方都为 \texttt{READY}），进行阻塞等待，防止覆盖了旧数据，保证覆盖率数据的完整性和可靠性。
+  \item \textbf{一致性检查}：消费者收到数据帧后，检查 \texttt{magic}是否与初始值的匹配，CRC 校验检查\texttt{crc32} 是否匹配。若任意一个不匹配则进行初始化（置状态为 \texttt{EMPTY}），记录警告；当不匹配的次数超过容错阈值时，抛出异常，向上层报告。
+\end{itemize}
+
+\section{细粒度分析模块设计与实现}
+细粒度分析模块是系统开展细粒度覆盖率分析的核心组件，其目标是对原始覆盖率数据进行解析与统计，并通过统一接口对外提供覆盖率查询与配置服务。模块基于Flask框架实现，能够按单板、领域、模块等多个维度分层统计覆盖率，并计算增量覆盖率，同时提供多时间点的覆盖率对比与趋势分析功能。整体上划分为接口适配层和解析任务层：前者面向外部提供统一访问接口，后者负责解析与分析覆盖率数据。
+
+\subsection{接口适配层}\label{5.3.1}
+该层以 Flask 应用为基础，封装对外服务接口，包括上传覆盖率数据文件、查询覆盖率结果、配置与查询解析参数等功能。通过该层，系统能够以标准化 API 的形式对外提供服务，实现与用户界面或其他业务模块的解耦。
+
+\subsubsection{类结构设计}
+接口适配层的类结构设计如图~\ref{fig:5.5}所示。该层作为细粒度分析模块的外部访问入口，主要负责用户请求的接收与转发，并通过工具类完成模型对象的构建和业务逻辑的执行，最终返回覆盖率分析结果。整体设计采用分层解耦思想，确保系统具备良好的可扩展性与可维护性。
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{comp/细粒度分析-接口适配层.pdf}
+    \caption{细粒度分析-接口适配层类图}
+    \label{fig:5.5}
+\end{figure}
+
+\paragraph{API 层（ConfApi / DataApi）}
+API 层提供对外的 HTTP 接口，分别由 \verb|ConfApi| 与 \verb|DataApi| 两个类实现。前者用于解析参数的配置与查询，后者用于覆盖率文件上传解析以及覆盖率数据查询。两类均实现 \verb|get()| 与 \verb|post()| 方法，支持 REST 风格的交互。该层不直接操作底层数据，而是通过工具层提供的统一接口完成业务逻辑调用，从而实现表示层与业务逻辑层的解耦。
+
+\paragraph{工具层（Utils）}
+\verb|Utils| 类是接口适配层的核心业务适配组件，承担模型实例构建、更新、持久化及查询等功能。其内部维护模型映射表 \verb|_model_map|，能够根据模型名来调用模型类，避免模型类暴露给接口层。通过 \verb|build_model_record|、\verb|get_model_records| 实现模型对象的构造以及数据表记录的查询。通过 \verb|_upsert_record|、\verb|_update_data|、\verb|update_conf|方法实现统一的数据访问与管理。通过 \verb|_build_by_smartci|、\verb|build_info|、\verb|build_modules| 等方法实现对解析任务层的调用。
+
+\paragraph{模型层（Coverage / Extra）}
+模型层包含 \verb|Coverage| 与 \verb|Extra| 两个类，分别用于表示覆盖率数据及其扩展配置信息。前者记录版本、单板、领域、模块、采集时间、当前提交节点及数据内容等核心属性，并提供覆盖率 HTML 报告解析方法；后者则管理模块信息、排除规则、二进制文件路径及项目负责人等配置项。该层为工具层提供了统一的数据实体对象，支撑业务逻辑的组织与持久化。
+
+\paragraph{服务层（SmartCI）}
+服务层由 \verb|SmartCI| 类实现，主要提供与外部 CI/CD 系统的集成能力。其核心方法包括 \verb|start_project()| 与 \verb|build_info()|，分别用于触发项目构建与获取项目信息。工具层通过该类与外部系统交互，确保覆盖率数据与工程构建信息保持一致。
+
+\subsubsection{主要算法设计}
+主要算法逻辑通过工具层的多个工具方法实现，按功能可划分为两个算法：覆盖率解析算法 和 参数配置算法，入口函数分别为 \verb|build_info()| 和 \verb|update_conf()|。在函数调用链中，由于均需要进行数据库记录的更新操作，因此两个算法复用了\verb|_upsert_record()| 方法，记为 插入更新算法。
+
+\paragraph{\textbf{覆盖率解析算法}}
+覆盖率解析算法伪代码如算法~\ref{algo:5.4}所示。该算法给出了细粒度分析中构造覆盖率信息的处理流程。
+
+\begin{algorithm}[ht]
+\caption{细粒度分析-接口适配层-覆盖率解析算法}
+\label{algo:5.4}
+\KwIn{Coverage模型对象 \texttt{RECORD}，表示一条覆盖率记录}
+\KwOut{写入/更新覆盖率记录，包含全量、模块、增量等多种维度}
+
+通过 Service 层中的 \texttt{SmartCI} 类启动 SmartCI 平台的任务\;
+\While{查询任务状态为 "\texttt{RUNNING}"}{
+    sleep(10) \tcp*{每 10 s 轮询一次}
+}
+\If{任务状态为 "\texttt{FAILED}"}{向上层抛出异常\;}
+调用 \texttt{RECORD} 的 \texttt{parse\_html()} 方法解析覆盖率报告得到结构化的覆盖率数据，并赋值给 \texttt{RECORD.data} \;
+调用 \textsc{UpsertRecord} 将\texttt{RECORD}写入数据库 \tcp*{详见算法 \ref{algo:5.6}}
+\ForEach{工作目录下的 \texttt{.info} 文件 $file$}{
+    \If{$file$ 为全量覆盖率文件}{ continue\;}
+    \tcp{此时，增量覆盖率文件名形如 \texttt{domain\_module.diff.info}，将 \texttt{module.diff} 视为特殊的模块名即可} 
+    通过正则匹配从 $file$ 文件名中匹配到当前对应的模块名\;
+    按照 $file$ 和模块名等信息构造新的 Coverage 模型对象 \texttt{coverage}\;
+    调用 \texttt{coverage.parse\_html()} 解析对应的覆盖率记录并赋值给 \texttt{coverage.data}\;
+    调用 \textsc{UpsertRecord} 将\texttt{coverage}写入数据库\;
+}
+\end{algorithm}
+
+算法核心目标是以 Coverage 模型对象作为载体，完成对原始覆盖率数据的解析与持久化，进而实现对全量、增量、模块级等多个层面的覆盖率的统一管理。该过程主要包含以下几个阶段：
+
+首先，系统通过 Service 层 的 \verb|SmartCI| 类调用 SmartCI 平台接口，启动一次解析任务。任务启动后，系统进入任务状态轮询阶段。当状态为 “\verb|RUNNING|” 时继续轮询。算法采取固定时间间隔的休眠策略（即每隔 10 秒轮询一次），控制查询请求的频率，避免对平台造成负担。若查询到任务状态为 “\verb|FAILED|”，则说明 SmartCI 平台任务执行失败，此时系统直接向上层抛出异常，由调用方进行异常处理。
+
+若 SmartCI 平台任务顺利完成，文件系统中已经存在各个层级的覆盖率 info 文件和对应的覆盖率报告。此时调用输入对象 \verb|RECORD| 的 \verb|parse_html()| 方法，对平台生成的覆盖率报告进行解析，得到结构化的覆盖率数据，并将结果存入 \verb|RECORD.data| 属性中。随后，调用 UpsertRecord 方法（见算法 \ref{algo:5.6}），将 \verb|RECORD| 对象持久化到数据库。
+
+在写入全量覆盖率记录之后，算法进一步处理模块级与增量级的覆盖率数据。系统会遍历当前工作目录下的所有 \verb|.info| 文件，逐一进行判断和解析。通过文件名匹配模块名，并跳过全量覆盖率文件。系统定义模块覆盖率文件的命名规则为 \verb|domain_module.info|，而增量覆盖率文件为 \verb|domain_module.diff.info|，因此可以直接通过正则匹配式来匹配文件中的模块名，此时 \verb|module.diff| 可以处理为特殊的模块名。模块名可放入 Coverage 模型对象的 \verb|module| 字段，默认为 \verb|all| 表示全量覆盖率，包含 \verb|.diff| 则为增量覆盖率。最终，构造一个对应模块的 Coverage 模型对象，使用与全量对象相同的方式实现覆盖率数据解析和持久化存储。
+
+通过上述步骤，该算法实现了从SmartCI 平台任务启动，覆盖率报告解析，到细粒度覆盖率存储的完整流程，保证了覆盖率数据的全面性、可追溯性与持久化管理。该算法不仅支持不同层级的覆盖率数据解析，还具备良好的扩展性，可在后续引入新的覆盖率维度时复用相同的处理框架。
+
+\paragraph{\textbf{参数配置算法}}
+当用户在配置参数时，需要根据需求自动触发对应的覆盖率数据的重新解析，以此实现灵活的覆盖率解析，即用户可以不用等待覆盖率数据的再次上传，直接验证新的解析参数的配置效果。
+
+参数配置算法伪代码如算法~\ref{algo:5.5}所示。该算法用于接收覆盖率解析参数并进行持久化存储，在参数实际发生变更时同步触发一次覆盖率重解析，以保证解析参数与覆盖率解析结果的一致性。
+
+\begin{algorithm}[ht]
+\caption{细粒度分析-接口适配层-参数配置算法}
+\label{algo:5.5}
+\KwIn{Extra 模型对象 \texttt{RECORD}，表示新的配置参数}
+\KwOut{更新 Extra 表，更新配置时同步触发一次覆盖率重解析）}
+
+调用 \textsc{UpsertRecord} 将\texttt{RECORD}写入数据库 \tcp*{详见算法 \ref{algo:5.6}}
+\textsc{UpsertRecord} 返回值 \texttt{updated} 表示更新后的 \texttt{RECORD}，\texttt{changed} 表示是否成功更新 \; 
+\uIf{not \texttt{changed}}{
+  抛出自定义异常，提示上层应用参数配置更新失败 \;
+}
+
+进入更新阶段，将 \texttt{updated.updating} 置为 \texttt{True} 并提交，标记对应的解析参数正在更新，保持当前更新操作的原子性 \;
+根据 \texttt{RECORD} 的属性值从 Coverage 表中查询对应的覆盖率记录对象 \texttt{coverage} \;
+\eIf{\texttt{coverage} 存在}{
+    调用 BuildInfo 实现覆盖率重新解析 \tcp*{详见算法 \ref{algo:5.4}}
+}{
+    抛出自定义异常，提示上层应用不存在对应的覆盖率记录\;
+}
+完成更新，将 \texttt{updated.updating} 置为 \texttt{False} 并提交 \;
+\end{algorithm}
+
+首先，调用 UpsertRecord 方法（见算法 \ref{algo:5.6}）将输入 RECORD 写入数据库。该方法返回二元组 (\verb|updated|, \verb|changed|)，其中 \verb|update| 为写入或更新后返回的模型对象，后续数据库操作均基于该对象，避免写入错误地址；\verb|changed|则表示此次操作是否产生了实际更新，若未更新，则需要抛出自定义异常通知上层应用。
+
+若参数已更新，算法尝试更新对应的覆盖率记录。首先将 \verb|updated| 中的 \verb|updating| 字段置为 \verb|True| 并提交至数据库，表明当前覆盖率记录正在处理，避免其他用户的操作影响此次更新。
+
+使用 \verb|updated| 中用于标识覆盖率对象的字段，在 Coverage 表中查询匹配的覆盖率记录 \verb|coverage|。若不存在相应记录，则需要抛出自定义异常通知上层应用。若记录存在，则调用 \verb|build_info()| 方法，根据新的解析参数，对该记录进行重新解析，详见算法 \ref{algo:5.4}。更新结束后，将 \verb|updated.updating| 复位回 \verb|False| 并提交至数据库，表示当前覆盖率记录处理完成。
+
+\paragraph{\textbf{插入更新算法}}
+该算法即为上述两个算法中复用的 \verb|upsert_record()| 方法，其伪代码如算法~\ref{algo:5.6}所示。
+
+\begin{algorithm}[ht]
+\caption{细粒度分析-接口适配层-插入更新算法}
+\label{algo:5.6}
+\KwIn{模型名 \texttt{MODEL\_NAME}，模型对象 \texttt{RECORD}，唯一性字段列表 \texttt{UNIQUE\_FIELDS}}
+\KwOut{(更新后的模型对象 \texttt{UPDATED}, 更新标记 \texttt{CHANGED})}
+
+根据 Utils 类的 \texttt{\_model\_map} 字典查找\texttt{MODEL\_NAME}对应的模型类 \texttt{model\_cls} \;
+根据 \texttt{UNIQUE\_FIELDS} 和 \texttt{model\_cls} 构造查询条件，通过唯一性约束查询模型数据表中对应的记录 \texttt{old}\;
+\If{不存在 \texttt{old}}{
+    向数据表中添加 \texttt{RECORD} 并提交 \;
+    \Return \texttt{(RECORD, True)} \tcp*{新增记录}
+}
+遍历 \texttt{RECORD} 与 \texttt{old} 中的所有字段，找出不同的字段，组织成一个字典 \texttt{update\_fields} \;
+\eIf{\texttt{update\_fields} 为空}{
+    \Return \texttt{(old, False)} \tcp*{无需更新}
+}{
+    将更新后的字段值赋值给 \texttt{old} 并提交至数据库\;   
+    \Return \texttt{(old, True)} \tcp*{更新记录}
+}
+\end{algorithm}
+
+首先，通过 \verb|MODEL_NAME| 在 \verb|Utils._model_map| 中查找得到 ORM 模型类 \verb|model_cls|，作为后续查询与写入的类型引用。
+
+接着，基于 \verb|UNIQUE_FIELDS| 构造SQLAlchemy查询条件查询模型数据表。其中 \verb|UNIQUE_FIELDS| 为唯一性字段列表，即模型中配置的唯一性约束字段，通过该字段列表可以构造查询条件，查询出数据表中是否存在唯一性约束字段值与 \verb|RECORD| 相同的记录 \verb|old|。若查询结果为空，则将 \verb|RECORD| 作为新增记录写入数据库：执行插入并提交事务。算法返回\verb|(RECORD, True)|，该分支完成“新增记录”。
+
+若存在 \verb|old|，则对 \verb|RECORD| 与 \verb|old| 的字段逐项比较，收集所有不相同的字段与字段值到差异字典 \verb|update_fields|。在比较过程中应排除不可比较的字段，例如 \verb|id|、\verb|_sa_instance_state| 等。此时，若 \verb|update_fields| 为空，表明新旧记录在可比较字段上无差异，算法返回 \verb|(old, False)|，该分支完成“无需更新”；否则，将差异字段逐项赋值到 \verb|old| 中，并提交至数据库，算法返回 \verb|(old, True)|，该分支完成“更新记录”。
+
+\subsection{解析任务层}
+该层作为脚本部署在SmartCI任务中，能够在SmartCI平台中完成细粒度覆盖率分析的核心任务：解析原始覆盖率数据文件，得到细粒度的覆盖率报告。
+
+\subsubsection{类结构设计}
+解析任务层的类结构设计如图~\ref{fig:5.6}所示。该层是细粒度分析模块的核心执行单元，主要负责覆盖率原始数据的解析、过滤、合并与增量计算，最终输出可供上层接口使用的覆盖率信息文件。其设计充分体现了解析任务的分工协作思想，由处理器统一调度，分工类分别完成特定任务，工具类则提供支撑功能。
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{comp/细粒度分析-解析任务层.pdf}
+    \caption{细粒度分析-解析任务层类图}
+    \label{fig:5.6}
+\end{figure}
+
+\paragraph{信息处理器（InfoProcessor）}
+\verb|InfoProcessor| 是解析任务层的核心调度类，负责组织覆盖率数据的全流程处理。其成员\verb|_llvm_profdata| 和 \verb|__llvm_cov| 是调用者配置的llvm工具，用于llvm数据的解析。其方法\verb|_extract()|负责原始数据提取，\verb|_merge_raw()| 负责原始数据合并，\verb|_build_modules()|实现模块覆盖率生成，\verb|_build_total()|实现全量覆盖率生成。对外提供的 \verb|build_info()| 方法为统一入口，协调调用 \verb|InfoExcluder| 与 \verb|IncParser| 完成数据预处理及增量分析，最终生成完整的覆盖率信息文件。
+
+\paragraph{信息过滤器（InfoExcluder）}
+\verb|InfoExcluder| 专注于覆盖率信息的排除处理，主要用于根据用户配置移除特定文件或函数的覆盖率数据。\verb|_exclude_files()|方法依据配置过滤指定文件，\verb|_exclude_funcs()|方法结合 \verb|_func_lines()| 方法，通过函数定义与调用位置计算待排除的行号集合。最终由对外方法 \verb|exclude_info()| 将过滤后的覆盖率信息文件返回给处理器。
+
+\paragraph{增量解析器（IncParser）}
+\verb|IncParser| 负责覆盖率数据的增量分析。其通过 \verb|_parse_git_diff()| 获取代码版本间的差异信息，结合源文件路径深度计算与公共祖先查找，提取增量代码行。随后通过 \verb|_collect_inc_code()| 与 \verb|_build_info()| 生成增量覆盖率信息文件。对外方法 \verb|run()| 为统一入口，处理完整流程实现增量覆盖率解析。
+
+\paragraph{工具类（Utils）}
+\verb|Utils| 为解析任务层提供通用工具方法，其中\verb|get_extra_field()| 方法调用接口适配层的配置查询接口，避免直接访问数据库；\verb|get_warnings()| 方法计算出告警信息，包括模块配置告警和覆盖率告警。
+
+\subsubsection{主要算法设计}
+解析任务层的算法按照功能可以分为：全量覆盖率分析算法，覆盖率排除算法，增量覆盖率分析算法，模块覆盖率分析算法，以及告警计算算法。
+
+全量覆盖率分析算法通过 \verb|InfoProcessor.build_info()| 实现；模块覆盖率分析算法基于全量覆盖率info \verb|all.info|，以及全量-增量覆盖率info \verb|all.diff.info|，通过 \verb|InfoProcessor._build_modules()| 实现两个 info 的模块级提取；覆盖率排除算法通过 \verb|InfoExcluder| 类实现；增量覆盖率分析算法通过 \verb|IncParser| 类实现；告警计算算法通过 \verb|get_warnings()| 方法实现。这些类均复用了工具方法 \verb|get_extra_field()|，该方法调用了~\ref{5.3.1} 接口适配层中的HTTP接口，避免引入底层结构影响其部署到SmartCI平台时的独立性。
+
+算法首先进行全量覆盖率分析，再陆续进行覆盖率排除和增量覆盖率分析，得到“脱水”后的全量覆盖率文件和全量-增量覆盖率文件。再分别对这两个文件进行模块覆盖率分析，即可得到模块覆盖率文件以及模块-增量覆盖率文件，最终进行告警计算得到告警信息。
+
+\paragraph{\textbf{全量覆盖率分析算法}}
+全量覆盖率分析算法伪代码如算法~\ref{algo:5.7}所示。该算法的核心目标是生成全量覆盖率信息文件。
+
+\begin{algorithm}[ht]
+\caption{细粒度分析-解析任务层-全量覆盖率分析算法}
+\label{algo:5.7}
+\KwIn{参数字典 \texttt{RPARAMS}}
+\KwOut{全量覆盖率信息文件 \texttt{TOTAL\_INFO}}
+
+从 \texttt{RPARAMS} 中获取工作目录 \texttt{workpath}，并设定原始数据目录 \texttt{raw\_path}\;
+调用 \texttt{\_extract(RPARAMS)} 解压原始文件，其中可能包括覆盖率数据包和构建包。该调用返回布尔值，判断原始文件中是否存在构建包\;
+根据\texttt{LLVM}和\texttt{GCC}工具链的特性，若存在构建包，则将工具链类型置为\texttt{GCC}，否则置为 \texttt{LLVM}\;
+
+\uIf{工具链类型为 \texttt{LLVM}}{
+  调用 \texttt{\_merge\_raw(raw\_path)} 合并目录下的所有 \texttt{.profraw} 文件，生成中间文件 \texttt{merged.raw}\;
+  通过调用工具方法 \texttt{get\_extra\_field()} 获取二进制文件存储的镜像路径和解压后的路径信息\;
+  解压镜像，从解压后的路径中得到待分析的二进制文件集合 \texttt{bin\_files}\;
+  通过 \texttt{llvm-cov} 工具，结合\texttt{bin\_files}，从 \texttt{merged.raw} 中提取出覆盖率 info，存储为临时文件 \texttt{result.tmp} \;
+}
+\ElseIf{工具链类型为 \texttt{GCC}}{
+  通过 \texttt{lcov} 工具，直接从 GCC 的原始覆盖率数据文件 \texttt{.gcda}, \texttt{.gcno} 中提取覆盖率 info，存储为临时文件 \texttt{result.tmp} \;
+}
+返回生成的全量覆盖率信息文件 \texttt{result.tmp} \;
+\end{algorithm}
+
+算法的输入为参数字典 \texttt{RPARAMS}，该字典包含工作目录、原始覆盖率数据目录等必要信息；输出为生成的全量覆盖率信息文件 \texttt{TOTAL\_INFO}，可供后续模块覆盖率和增量覆盖率分析使用。
+
+首先从 \texttt{RPARAMS} 中获取工作目录 \texttt{workpath}，并根据目录结构设定原始数据目录 \texttt{raw\_path}，用于存放待解析的覆盖率原始数据。随后，调用 \texttt{\_extract(RPARAMS)} 解压原始覆盖率数据包及构建包，其中由于 GCC 工具链的特殊性，构建包可能不存在，因此需要额外判断并返回结果。若返回结果表示构建包不存在，则工具链为 GCC，否则工具链为 LLVM。
+
+在 LLVM 工具链分支中，算法执行以下步骤：
+\begin{enumerate}
+    \item 调用 \texttt{\_merge\_raw()} 将原始覆盖率数据目录下的所有 \texttt{.profraw} 文件合并生成原始数据文件 \texttt{merged.raw}。此步骤确保所有测试节点采集到的覆盖率数据统一汇总。
+    \item 调用工具方法 \texttt{get\_extra\_field()} 查询数据表 Extra，获取LLVM 覆盖率解析所需的二进制文件所在的镜像路径及解压路径信息，解压后得到二进制文件集合 \texttt{bin\_files}。\
+    \item 使用 \texttt{llvm-cov} 工具结合 \texttt{bin\_files} 和原始数据文件 \texttt{merged.raw} 提取覆盖率信息，并存储为临时文件 \texttt{result.tmp}，完成全量覆盖率信息的生成。
+\end{enumerate}
+
+在 GCC 工具链分支中，算法直接调用 \texttt{lcov} 工具，从 GCC 原始覆盖率数据文件 \texttt{.gcda} 与 \texttt{.gcno} 中提取覆盖率信息，并将结果存储为 \texttt{result.tmp}。
+
+算法在完成对应工具链的数据提取后，返回生成的全量覆盖率信息文件 \texttt{result.tmp}，供解析任务层的模块覆盖率分析和增量覆盖率分析使用。该算法充分考虑了不同工具链差异和数据包格式差异，体现了系统的兼容性。
+
+\paragraph{\textbf{覆盖率排除算法}}
+覆盖率排除算法伪代码如算法~\ref{algo:5.8}所示。该算法实现了覆盖率“脱水”任务，将全量覆盖率中与当前领域无关的覆盖率记录排除。主要包括排除文件和排除函数两个步骤。
+
+\begin{algorithm}[ht]
+\caption{细粒度分析-解析任务层-覆盖率排除算法}
+\label{algo:5.8}
+\KwIn{参数字典 \texttt{RPARAMS}，全量覆盖率信息文件 \texttt{TOTAL\_INFO}}
+\KwOut{脱水全量覆盖率信息文件 \texttt{DOMAIN\_all.info}}
+
+% \tcp{1. 排除指定文件的覆盖率记录}
+调用 \texttt{Utils.get\_extra\_field(RPARAMS, "exclude\_files")} 获取待排除的文件列表 \texttt{exclude\_files}\;
+\uIf{\texttt{exclude\_files} 非空}{
+    使用 \texttt{lcov --remove} 命令将 \texttt{TOTAL\_INFO} 中对应文件记录排除，生成中间文件 \texttt{files\_excluded.tmp}\;
+}\Else{
+    将 \texttt{TOTAL\_INFO} 复制为中间文件 \texttt{files\_excluded.tmp}\;
+}
+
+% \tcp{2. 排除指定函数的覆盖率记录}
+调用 \texttt{Utils.get\_extra\_field(RPARAMS, "exclude\_funcs")} 获取待排除的函数定义和函数调用列表 \texttt{func\_def, func\_call}\;
+\uIf{\texttt{func\_def} 或 \texttt{func\_call} 非空}{
+    逐行读取 \texttt{files\_excluded.tmp} 为 \texttt{LINES}\;
+    初始化 \texttt{NEW\_LINES} 为空列表\;
+    \tcp{每个源文件记录段以 \texttt{TN:} 开始，以 \texttt{end\_of\_record} 结束}
+    \ForEach{ \texttt{LINES} 中的源文件记录段 \texttt{SECTION}}{
+        根据 \texttt{SF:} 行获取源文件路径 \texttt{source\_path}\;
+        根据正则匹配，找到待排除函数在源文件中涉及到的代码行号集合 \texttt{FUNC\_LINES}\;
+        \ForEach{ \texttt{SECTION} 中的每一行 \texttt{LINE}}{
+            筛选包含在\texttt{FUNC\_LINES}中的 \texttt{DA} 行\;
+            筛选包含在\texttt{func\_def}中的 \texttt{FN, FNDA} 行\;
+            筛选\texttt{LF, LH, FNF, FNH} 行\;
+            除了上述行，遍历到的每个 \texttt{LINE} 均写入 \texttt{NEW\_LINES}\;
+        }
+        重新统计\texttt{LF, LH, FNF, FNH}，并附加至 \texttt{NEW\_LINES}\;
+    }
+    将 \texttt{NEW\_LINES} 写入中间文件 \texttt{funcs\_excluded.tmp}\;
+}\Else{
+    将 \texttt{files\_excluded.tmp}复制为中间文件 \texttt{funcs\_excluded.tmp}\;
+}
+
+% \tcp{3. 重命名脱水全量 info 文件并清理临时文件}
+将\texttt{funcs\_excluded.tmp}重命名为 \texttt{DOMAIN\_all.info}，其中 \texttt{DOMAIN} 来源于 \texttt{RPARAMS["domain"]}\;
+删除所有中间临时文件 \texttt{*.tmp}\;
+\Return 脱水全量覆盖率信息文件 \texttt{DOMAIN\_all.info}\;
+\end{algorithm}
+
+该算法按照用户配置的解析参数对指定文件和函数进行排除处理，生成脱水后的全量覆盖率信息文件，保证当前领域覆盖率分析的独立性。
+
+进入排除文件阶段，算法首先调用方法\verb|get_extra_fields()| 获取用户配置中需要排除的文件列表 \verb|exclude_files|。如果文件列表非空，则通过 \verb|lcov --remove| 命令在全量覆盖率信息文件 \verb|result.tmp| 中移除对应文件的覆盖率记录，生成中间文件 \verb|files_excluded.tmp|。如果用户未配置任何排除文件，则将原始 \verb|result.tmp| 复制为中间文件，确保后续处理的统一性。
+
+进入排除函数阶段，算法调用方法\verb|get_extra_fields()|获取需要排除的函数定义及函数调用列表 \verb|func_def| 和 \verb|func_call|。如果函数排除列表为空，则将 \verb|files_excluded.tmp| 复制为 \verb|funcs_excluded.tmp|，进入下一阶段。
+
+而若任一列表非空，则对 \verb|files_excluded.tmp| 文件逐行读取，分割成源文件记录段（以 \verb|TN:| 开始，以 \verb|end_of_record| 结束）。对于每个源文件记录段，算法通过正则匹配查找待排除函数在源文件中涉及的行号集合 \verb|FUNC_LINES|。遍历记录段的每一行：
+
+\begin{enumerate}
+    \item 对于 \verb|DA|（行覆盖率）行，如果行号属于 \verb|FUNC_LINES|，则排除该行；
+    \item 对于 \verb|FN/FNDA|（函数定义及调用覆盖率）行，如果函数名属于 \verb|func_def|，则排除该行；
+    \item 排除统计行 \verb|LH, LF, FNF, FNH|；
+    \item 对于其他行，保留并写入新的行集合 \verb|NEW_LINES|。
+\end{enumerate}
+
+排除处理完成后，算法重新计算覆盖率段的统计信息，包括 LF（可覆盖行数）、LH（已覆盖行数）、FNF（函数总数）、FNH（已覆盖函数数），并将这些统计信息附加到 \verb|NEW_LINES| 中，最后追加写入中间文件 \verb|funcs_excluded.tmp|。
+
+进入收尾阶段，算法将所得中间文件 \verb|funcs_excluded.tmp| 重命名为 \verb|{RPARAMS["domain"]}_all.info|，此即为脱水后的全量覆盖率信息文件。为保证环境整洁和避免冗余数据影响后续分析，算法会删除所有中间临时文件（*.tmp）。最终，返回脱水后的全量覆盖率信息文件。
+
+\paragraph{\textbf{增量覆盖率分析算法}}
+增量覆盖率分析算法伪代码如算法~\ref{algo:5.9}所示。算法基于全量覆盖率信息文件和增量代码信息，构造增量覆盖率信息文件。
+
+\begin{algorithm}[ht]
+\caption{细粒度分析-解析任务层-增量覆盖率分析算法}
+\label{algo:5.9}
+\KwIn{参数字典 \texttt{RPARAMS}，全量覆盖率信息文件 \texttt{TOTAL\_INFO}}
+\KwOut{增量覆盖率信息文件 \texttt{INC\_INFO}}
+
+% \tcp{1. 提取全量源文件路径}
+通过 \texttt{grep} 命令从\texttt{TOTAL\_INFO} 中获取源文件路径列表 \texttt{SF\_FILES}\;
+
+% \tcp{2. 计算公共祖先目录}
+根据 \texttt{RPARAMS["prefix\_depth"]} 和 \texttt{SF\_FILES}，计算指定深度的公共祖先目录列表 \texttt{ANCESTORS}\;
+
+% \tcp{3. 解析增量修改代码和函数}
+调用 \texttt{get\_extra\_field()} 方法获取基准提交节点\texttt{base\_commit}和当前提交节点 \texttt{curr\_commit}\;
+\tcp{使用字典 \{\{file\}: \{lines: set(), funcs: set()\}\} 来存储增量代码信息}
+初始化 \texttt{INC\_DICT} 为字典\;
+\ForEach{\texttt{ANCESTORS} 中的目录 \texttt{ancestor}}{
+    通过 \texttt{git diff} 命令，根据\texttt{base\_commit, curr\_commit} 获取 \texttt{ancestor} 的代码差异文件\;
+    解析差异文件，提取每个源文件中，增量代码涉及到的行号 \texttt{LINES} 和函数名 \texttt{FUNCS}\;
+    将 \texttt{LINES} 和 \texttt{FUNCS} 更新到 \texttt{INC\_DICT} 对应文件的条目中\;
+}
+
+% \tcp{4. 构建增量覆盖率信息文件}
+逐行读取 \texttt{TOTAL\_INFO} 文件为 \texttt{LINES} \;
+初始化 \texttt{NEW\_LINES} 为空列表\;
+\tcp{每个源文件记录段以 \texttt{TN:} 开始，以 \texttt{end\_of\_record} 结束}
+\ForEach{ \texttt{LINES} 中的源文件记录段 \texttt{SECTION}}{
+    获取源文件路径 \texttt{SF\_PATH}\;
+    \If{\texttt{SF\_PATH} 不在 \texttt{INC\_DICT} 中}{continue}
+    \ForEach{\texttt{SEGMENT} 中的每行 \texttt{LINE}} {
+        筛选不包含在\texttt{INC\_DICT[SF\_PATH]["lines"]} 中的 \texttt{DA} 行\;
+        筛选不包含在\texttt{INC\_DICT[SF\_PATH]["funcs"]} 中的 \texttt{FN,FNDA} 行\;
+        筛选所有 \texttt{BRDA} 行 \;
+        筛选\texttt{LF, LH, FNF, FNH, BRF, BRH} 行\;
+        除了上述行，遍历到的每个 \texttt{LINE} 均写入 \texttt{NEW\_LINES}\;
+    }
+    重新统计\texttt{LF, LH, FNF, FNH}，令 \texttt{BRF = 0, BRH = 0}，并附加至 \texttt{NEW\_LINES}\;
+}
+将 \texttt{NEW\_LINES} 写入文件 \texttt{INC\_INFO}\;
+\Return 增量覆盖率信息文件 \texttt{INC\_INFO}\;
+\end{algorithm}
+
+进入增量代码分析阶段。首先，算法对 \verb|TOTAL_INFO| 文件使用 \verb|grep| 命令，查询其中的\verb|SF:| 行，进而获取覆盖率信息所涉及的所有源文件路径，生成源文件列表 \verb|SF_FILES|。根据参数字典中 \verb|RPARAMS["prefix_depth"]| 的配置，对 \verb|SF_FILES| 中的源文件路径进行前缀匹配，计算指定深度的公共祖先目录列表 \verb|ANCESTORS|。该操作能够缩小增量解析的范围，仅对可能存在增量修改的目录执行 \verb|git diff|，提高算法性能。
+
+接着，调用\verb|get_extra_field()| 方法获取用户配置的基准提交节点 \verb|base_commit| 和当前覆盖率提交节点 \verb|curr_commit|，用于后续 \verb|git diff|。使用字典 \verb|INC_DICT| 记录每个源文件对应的增量行号集合和增量函数集合，格式为 \verb|{文件路径: {lines: set(), funcs: set()}}|。对于每个祖先目录，执行 \verb|git diff| 获取代码差异文件，使用正则表达式解析其中的\verb|Hunk Header|，得到每个源文件的增量代码涉及到的行号和函数名，存储到\verb|INC_DICT|中对应文件的条目中。
+
+进入增量覆盖率分析阶段。此时，逐行读取全量覆盖率文件 \verb|TOTAL_INFO|，分割为源文件记录段。遍历记录段的每一行：
+\begin{enumerate}
+    \item 对于 \verb|DA|（行覆盖率）行，如果行号不属于增量代码行，则排除该行；
+    \item 对于 \verb|FN/FNDA|（函数定义及调用覆盖率）行，如果函数名不属于增量代码函数，则排除该行；
+    \item 排除所有 \verb|BRDA|（分支覆盖率）行。由于增量代码中分支结构不完整，增量覆盖率信息中难以分析分支覆盖率；
+    \item 排除统计行 \verb|LF, LH, FNF, FNH, BRF, BRH|；
+    \item 对于其他行，保留并写入新的行集合 \verb|NEW_LINES|。
+\end{enumerate}
+
+排除处理完成后，算法重新计算覆盖率段的统计信息，包括 LF（可覆盖行数）、LH（已覆盖行数）、FNF（函数总数）、FNH（已覆盖函数数），同时将 BRF（分支总数）和BRH（分支覆盖数）置零，并将这些统计信息附加到 \verb|NEW_LINES| 中，最后追加写入增量覆盖率文件 \verb|domain_all.diff.info|。
+
+完整处理后，生成的文件仅包含增量代码相关的覆盖率信息，同时保证统计字段与增量数据一致，可直接用于增量覆盖率报告生成或后续覆盖率评估流程。
+
+\paragraph{\textbf{模块覆盖率分析算法}}
+模块覆盖率分析算法伪代码如算法~\ref{algo:5.10}所示。该算法能够将全量覆盖率信息拆分为各个模块的覆盖率文件，并进一步对标记为核心模块的模块进行聚合统计。
+
+\begin{algorithm}[ht]
+\caption{细粒度分析-解析任务层-模块覆盖率分析算法}
+\label{algo:5.10}
+\KwIn{参数字典 \texttt{RPARAMS}，全量覆盖率信息文件 \texttt{TOTAL\_INFO}}
+\KwOut{模块级覆盖率信息文件\texttt{MODULE\_INFO}, 核心模块聚合信息文件\texttt{CORE\_INFO}}
+
+% \tcp{1. 初始化与模块信息解析}
+从 \texttt{RPARAMS} 中取得工作目录 \texttt{workpath} 和 领域 \texttt{domain} \;
+调用 \texttt{Utils.get\_extra\_field(RPARAMS, "modules\_info")} 获取用户配置的模块信息 \texttt{MODULES} \;
+初始化空列表 \texttt{CORE\_MODULES} 用于存储核心模块 info 文件路径\;
+获取 \texttt{TOTAL\_INFO} 的文件后缀列表\;
+
+% \tcp{2. 遍历模块，生成模块覆盖率 info}
+\ForEach{\texttt{MODULES}键值对中的模块名和模块信息}{
+    根据领域名、模块名和文件后缀列表构造模块 info 文件路径 \texttt{MODULE\_INFO} \;
+    
+    \If{模块信息中该模块标注为核心模块}{
+        将 \texttt{MODULE\_INFO} 添加至 \texttt{CORE\_MODULES} \;
+    }
+    从模块信息中获取模块对应的源文件列表 \texttt{FILES} \;
+    通过 \texttt{lcov --extract} 命令从 \texttt{TOTAL\_INFO} 中提取模块对应的文件的覆盖率记录，写入 \texttt{MODULE\_INFO} \;
+}
+
+% \tcp{3. 聚合核心模块覆盖率 info}
+构建核心模块 info 文件路径\texttt{CORE\_INFO} \;
+通过 \texttt{lcov -a} 命令，将 \texttt{CORE\_MODULES} 中的所有 info 文件合并到 \texttt{CORE\_INFO} 中 \;
+
+\Return \texttt{MODULE\_INFO}, \texttt{CORE\_INFO}
+\end{algorithm}
+
+调用工具方法 \verb|get_extra_field| 查询数据表，获取用户配置的模块信息 \verb|modules_info|，解析为字典格式的\verb|MODULES|，模块名称作为键，每个值中包括所含源文件路径列表以及核心模块标识。
+
+初始化空列表 \verb|CORE_MODULES| 用于存储核心模块对应的覆盖率信息文件路径，以便后续进行聚合操作。
+
+该算法能够兼容全量覆盖率和增量覆盖率，其差别主要在于后缀名，因此需要解析 \verb|TOTAL_INFO| 的后缀名，便于后续构造模块覆盖率信息文件的后缀名。此时开始遍历模块信息表\verb|MODULES|，对于每个模块：
+
+\begin{enumerate}
+    \item 构造模块覆盖率信息文件路径\verb|MODULE_INFO|；
+    \item 若模块标记为核心模块，则将\verb|MODULE_INFO|写入\verb|CORE_MODULES|；
+    \item 通过 \verb|lcov --extract| 命令，从\verb|TOTAL_INFO|中提取模块对应文件的覆盖率记录，并写入 \verb|MODULE_INFO|。
+\end{enumerate}
+
+此时，已经完成了所有模块覆盖率信息文件的构建，根据核心模块列表 \verb|CORE_MODULES|，通过 \verb|lcov -a| 命令，将 \verb|CORE_MODULES| 列表中所有模块覆盖率信息文件合并生成 \verb|CORE_INFO|，得到核心模块覆盖率信息文件。
+
+先后对全量覆盖率文件和全量-增量覆盖率文件调用该算法，能够得到模块覆盖率文件和模块-增量覆盖率文件，实现细粒度的覆盖率分析。
+
+\paragraph{\textbf{告警计算算法}}
+告警计算算法伪代码如算法~\ref{algo:5.11}所示。告警内容包括三类问题：重复匹配模块的文件；未匹配模块的文件；覆盖率为 0 的函数。
+
+\begin{algorithm}[ht]
+\caption{细粒度分析-解析任务层-模块覆盖率分析算法}
+\label{algo:5.11}
+\KwIn{参数字典 \texttt{RPARAMS}}
+\KwOut{告警信息文件 \texttt{WARNING\_FILE}}
+
+构造空字典 \texttt{WARNINGS} \;
+通过 \texttt{RPARAMS} 构造全量覆盖率信息文件路径 \texttt{TOTAL\_INFO} \;
+通过 \texttt{grep} 命令从\texttt{TOTAL\_INFO} 中获取源文件路径集合 \texttt{TOTAL\_FILES}\;
+构造空集合 \texttt{MODULE\_FILES} \;
+\ForEach{工作目录下的模块覆盖率信息文件 \texttt{module\_info}}{
+    通过 \texttt{grep} 命令从\texttt{module\_info} 中获取源文件路径 \texttt{files}\;
+    将 \texttt{files} 添加到集合 \texttt{MODULE\_FILES} 中，记录重复文件列表，并写入\texttt{WARNINGS["duplicated"]["module\_info"]}\;
+}
+对\texttt{TOTAL\_FILES} 和 \texttt{MODULE\_FILES}做差集，得到未匹配文件列表\texttt{file\_not\_matched} \;
+将 \texttt{file\_not\_matched} 写入\texttt{WARNINGS["not\_matched"]}\;
+初始化 \texttt{funcs\_not\_covered} 为一个空字典 \;
+逐行读取 \texttt{TOTAL\_INFO} 为 \texttt{LINES} \;
+% \tcp{每个源文件记录段以 \texttt{TN:} 开始，以 \texttt{end\_of\_record} 结束}
+\ForEach{ \texttt{LINES} 中的源文件记录段 \texttt{SECTION}}{
+    获取源文件路径 \texttt{SF\_PATH}\;
+    \ForEach{\texttt{SEGMENT} 中的每行 \texttt{LINE}} {
+        筛选覆盖率为0的 \texttt{FNDA} 行 \;
+        将该行对应的函数名写入 \texttt{funcs\_not\_covered["SF\_PATH"]} \;
+    }
+}
+将 \texttt{funcs\_not\_covered} 写入\texttt{WARNINGS["not\_covered"]}\;
+将 \texttt{WARNINGS} 写入文件 \texttt{WARNING\_FILE} \;
+\Return \texttt{WARNING\_FILE} \;
+\end{algorithm}
+
+首先，算法依据 \verb|RPARAMS| 构造全量覆盖率信息文件路径 \verb|TOTAL_INFO|，通过 \verb|grep| 从 LCOV 格式的 \verb|TOTAL_INFO| 中提取所有 \verb|SF| 行，构造全量文件集合 \verb|TOTAL_FILES|。
+
+遍历工作目录下的所有模块覆盖率信息文件，对每个 \verb|module_info|，同样通过 \verb|grep| 提取其源文件集合 \verb|files|，最终添加到集合\verb|MODULE_FILES| 中。其中，记录重复文件列表 \verb|file_duplicated|，作为该 \verb|module_info| 的“重复匹配文件”写入 \verb|WARNINGS["duplicated"]|。
+
+计算\verb|TOTAL_FILES| 和 \verb|MODULE_FILES|的差集 \verb|file_not_matched|，表示在全量覆盖率信息文件中出现但未被任何模块规则覆盖的文件，写入 \verb|WARNINGS["not_matched"]|。
+
+初始化空字典 \verb|funcs_not_covered|。逐行读取全量覆盖率文件，分割为源文件记录段。获取当前段的源文件路径 \verb|SF_PATH|，再遍历记录段的每一行，其中对于 \verb|FNDA|（函数调用覆盖率）行，若覆盖率为0，则将函数名写入 \verb|funcs_not_covered["SF_PATH"]|。最终将 \verb|funcs_not_covered| 写入 \verb|WARNING["not_covered"]| 。
+
+将 \verb|WARNINGS| 写入 \verb|WARNING_FILE|，供上层应用展示与审计追踪。
+
+
+\section{覆盖率可视化模块设计与实现}
+由于覆盖率可视化模块主要承担前端展示与交互功能，不涉及复杂的计算逻辑，因此在详细设计中采用类图对其结构进行描述，而不再展开算法设计。
+
+\subsection{类结构设计}
+覆盖率可视化模块的类图如图~\ref{fig:5.7}所示。
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=1.0\textwidth]{comp/覆盖率可视化-类图.pdf}
+    \caption{覆盖率可视化-类图}
+    \label{fig:5.7}
+\end{figure}
+
+模块采用 Vue.js 框架，实现了组件化架构。用户界面主要由配置界面与图表展示界面两大视图组成，分别实现参数配置与结果展示功能。在图表展示界面中，进一步细分为告警信息组件、表格信息组件、柱状图信息组件以及筛选面板组件。所有组件均通过 Vuex 状态管理进行数据共享和同步，用户交互经由组件提交到 Vuex Store，触发状态更新与数据刷新，从而实现前端视图的统一驱动与响应。该架构符合典型的 MVVM 模式，确保了界面层与业务逻辑层的解耦，并提高了系统的可维护性与扩展性。
+
+\paragraph{ConfigView（配置界面）}
+配置界面采用表单交互方式实现领域参数的选择。用户可通过设置领域参数以指定当前所属领域，并在此基础上配置对应的解析参数。领域参数主要包括版本信息、单板类型及领域标识。界面通过标签页划分不同类别的解析参数配置项，包括排除文件、排除函数、模块信息、基准提交节点以及领域管理员等。此外，配置界面还支持原始覆盖率数据文件的上传，并提供手动触发解析的功能，以满足灵活的数据处理需求。
+
+在功能实现上，界面视图通过 \verb|configureParams()| 方法完成解析参数的配置，通过 \verb|uploadCoverageFile()| 方法实现覆盖率文件的上传操作，并通过 \verb|triggerAnalysis()| 方法触发覆盖率解析流程。上述方法均通过 Vuex Store 触发相应的状态更新，保证前后端数据的一致性。
+
+\paragraph{ChartView（图表展示界面）}
+ChartView 作为结果展示的整体容器，聚合了告警信息、表格、柱状图、筛选器等子组件。其核心职责是基于 Vuex Store 中的覆盖率数据进行渲染，并在用户交互发生时及时刷新对应的子组件。
+
+\subparagraph{FilterPanel（筛选面板组件）}
+筛选面板组件实现了\verb|chooseDimension()| 方法，提供覆盖率展示维度的选择功能，用户可通过选择器、按钮等控件在不同层次之间切换，包括：
+
+\begin{itemize}
+    \item 单板维度下的不同领域覆盖率；
+    \item 单领域维度下的不同模块覆盖率，以及核心模块聚合覆盖率；
+    \item 相同维度下的不同时间覆盖率；
+\end{itemize}
+
+上述覆盖率均可以选择展示全量覆盖率还是增量覆盖率。其中增量覆盖率是基于解析参数中的基准提交节点，计算的当前提交与基准提交之间的增量代码的覆盖率数据。当用户完成选择并确认后，组件调用 \verb|confirmSelection()| 方法，将选择参数提交至 Vuex Store，触发全局状态更新，从而驱动 ChartView 下各子组件的重新渲染。
+
+\subparagraph{AlarmList（告警列表组件）}
+告警列表组件负责展示覆盖率解析过程中产生的告警信息。其数据来源于细粒度解析模块中，算法~\ref{algo:5.11}告警计算算法计算得到的告警信息文件，组件实现了\verb|showAlarms()| 方法，通过访问并解析该文件实现实时更新，确保用户能够及时获取解析过程中的异常提示。
+
+\subparagraph{CoverageTable（表格信息组件）}
+表格信息组件实现了\verb|showStructuredData()| 方法，以结构化表格的形式展示覆盖率数据，支持分页、排序与搜索等交互功能，便于用户对大规模覆盖率数据进行检索与分析。该组件通过绑定 Vuex Store 中的覆盖率数据状态实现动态更新。
+
+\subparagraph{CoverageBarChart（柱状图信息组件）}
+柱状图信息组件实现了\verb|showBarChart()| 方法，以可视化方式直观呈现覆盖率指标，支持柱形点击交互，通过 \verb|onBarClick()| 方法构造静态资源访问 URL，并跳转至对应的静态覆盖率报告。柱状图的数据来源同样依赖 Vuex Store 的覆盖率数据状态，并随筛选条件的变化而自动重绘。
+
+\paragraph{VuexStore（全局状态管理）}
+VuexStore 是覆盖率可视化模块的核心数据管理中心，负责实现状态的集中式管理。其内部按照 Vuex 的分层机制划分为：
+\begin{itemize}
+    \item State：存储覆盖率数据、告警信息、筛选条件及解析状态等全局共享变量；
+    \item Getters：对 State 中的数据进行封装，提供组件可直接访问的派生状态；
+    \item Mutations：定义同步更新 State 的方法，保证状态修改过程的可控性和可追踪性；
+    \item Actions：封装异步逻辑并与后端交互，触发相应的 Mutation 更新 State，从而实现数据的拉取、解析与刷新。
+\end{itemize}
+
+通过上述分层机制，VuexStore 有效分离了状态存储、派生计算、更新逻辑与异步操作，使前端应用在功能扩展和状态管理上更具可维护性和可扩展性。
+
+\subsection{典型交互流程说明}
+覆盖率可视化模块的交互流程均围绕 VuexStore 进行，典型场景包括参数配置与覆盖率重新解析、数据维度切换、告警信息展示、柱状图交互等。通过以下交互设计，覆盖率可视化模块能够实现参数配置、文件上传、覆盖率数据展示与交互分析的完整功能链条。
+
+\paragraph{参数配置与覆盖率重新解析}
+用户在配置界面执行参数配置和文件上传操作，调用 Vuex Action，触发后端参数配置接口，等待后端覆盖率重解析完成、前端得到响应后，通过 Mutation 更新覆盖率数据状态，驱动 ChartView 重新渲染。
+
+\paragraph{数据维度切换}
+用户在筛选面板中确认新的维度参数，提交至 Vuex Store，触发后端覆盖率查询接口，重新拉取不同维度的覆盖率数据，通过 Mutation 更新覆盖率数据状态，驱动 ChartView 重新渲染。
+
+\paragraph{告警信息展示}
+覆盖率解析过程中产生的告警信息文件存储在静态文件系统中。前端通过 Vuex Action 在覆盖率数据拉取时构造静态资源URL访问告警信息文件并解析得到告警状态，写入 State；AlarmList 组件实时订阅 Store 中的告警状态并更新。
+
+\paragraph{柱状图交互}
+用户点击柱状图中的特定柱体后，组件依据对应参数构造静态报告的 URL 并进行跳转，展示更为详细的覆盖率报告。
+
+\section{数据存储模块设计与实现}
+数据存储模块主要作用是存储覆盖率解析得到的结构化的覆盖率数据，以及生成的html格式的覆盖率报告。其中，覆盖率数据存储在 MySQL数据库中，而覆盖率报告存储在 Flask 框架的 static 静态文件目录中。
+
+\subsection{静态文件目录结构}
+静态文件系统即为Flask框架的static目录，其中的静态资源可以构造URL直接访问。覆盖率信息和覆盖率报告在细粒度解析模块中生成，存储在静态文件系统中。其目录结构按时间、版本、单板、领域进行层级管理。示例如下：
+
+\begin{lstlisting}[language=bash, basicstyle=\ttfamily\small, breaklines=true, breakindent=2em, frame=tb]
+static/
+ └─resources/
+  └─2025-08-29/                 # 覆盖率采集时间
+   └─version/                   # 覆盖率版本信息
+    └─board/                    # 覆盖率单板信息
+     └─domain/                  # 覆盖率领域信息
+      ├─domain_all/             # 全量覆盖率报告
+      ├─domain_all.diff/        # 全量-增量覆盖率报告
+      ├─domain_core/            # 核心覆盖率报告
+      ├─domain_core.diff/       # 核心-增量覆盖率报告
+      ├─domain_module/          # 模块覆盖率报告
+      ├─domain_module.diff/     # 模块-增量覆盖率报告
+      ├─raw/                    # 存储原始覆盖率文件
+      ├─domain_all.diff.info    # 全量-增量覆盖率信息
+      ├─domain_all.info         # 全量覆盖率信息
+      ├─domain_core.diff.info   # 核心-增量覆盖率信息
+      ├─domain_core.info        # 核心覆盖率信息
+      ├─domain_module.diff.info # 模块-增量覆盖率信息
+      └─domain_module.info      # 模块覆盖率信息
+\end{lstlisting}
+
+
+\noindent 该目录结构设计具有以下特点：
+\begin{itemize}
+    \item 按 覆盖率采集时间进行一级划分，方便区分不同批次生成的覆盖率结果；
+    \item 按 版本、单板、领域逐层组织子目录，实现覆盖率报告的多维管理；
+    \item 在每个领域目录下，存放不同粒度的覆盖率报告文件，包括全量、增量和核心模块报告，以及原始数据文件，便于前端访问和历史数据管理；
+    \item 基于Flask静态文件系统的特性，通过构造静态资源 URL 即可直接访问对应覆盖率报告。
+\end{itemize}
+
+\subsection{数据表结构}
+
+数据存储模块中的核心数据由两张表组成：\texttt{Coverage} 表与 \texttt{Extra} 表。表结构设计遵循关系型数据库规范，以确保数据的一致性、完整性和可扩展性。
+
+\paragraph{Coverage 表}
+\texttt{Coverage} 表用于存储覆盖率解析得到的结构化覆盖率数据。表字段如表~\ref{tab:5.2} 所示。
+
+\begin{table}
+    \centering
+    \caption{Coverage 表字段结构}
+    \label{tab:5.2}
+    \begin{tabular}{lll}
+        \toprule
+        字段名 & 类型 & 说明 \\
+        \midrule
+        \verb|id| & Integer & 主键，唯一标识 \\
+        \verb|version| & String(64) & 软件版本号 \\
+        \verb|board| & String(64) & 单板类型 \\
+        \verb|domain| & String(64) & 覆盖率所属领域 \\
+        \verb|module| & String(64) & 模块名称 \\
+        \verb|collect_time| & DateTime & 数据采集时间 \\
+        \verb|curr_commit| & String(64) & 当前提交节点 \\
+        \verb|data| & JSON & 覆盖率数据（结构化 JSON） \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+其中，\verb|id| 为自增主键，用于唯一标识每条记录；\verb|version|，\verb|board|，\verb|domain| 字段联合作为唯一性约束，以保证同一版本、单板和领域的数据不会重复；\verb|curr_commit|字段表示当前记录对应的代码提交节点，用于覆盖率解析中的增量覆盖率计算；\verb|data| 字段通过JSON格式存储解析后的结构化覆盖率数据。
+
+\paragraph{Extra 表}
+\texttt{Extra} 表用于存储覆盖率解析过程中的辅助信息及配置信息，表字段如表~\ref{tab:5.3} 所示。
+
+\begin{table}
+    \centering
+    \caption{Extra 表字段结构}
+    \label{tab:5.3}
+    \begin{tabular}{lll}
+    \toprule
+    字段名 & 类型  & 说明 \\
+    \midrule
+    \verb|id| & Integer & 主键，唯一标识 \\
+    \verb|version| & String(64) & 软件版本号 \\
+    \verb|board| & String(64) & 单板类型 \\
+    \verb|domain| & String(64) & 覆盖率所属领域 \\
+    \verb|admins| & JSON & 领域管理员列表 \\
+    \verb|owner| & String(16) & 领域责任人 \\
+    \verb|base_commit| & String(64) & 基准提交节点 \\
+    \verb|modules_info| & JSON & 模块信息 \\
+    \verb|exclude_files| & JSON & 排除文件列表 \\
+    \verb|exclude_funcs| & JSON & 排除函数列表 \\
+    \verb|bin_file| & JSON & 二进制文件信息 \\
+    \verb|last_modified| & DateTime & 最新记录时间 \\
+    \verb|updating| & Boolean & 是否正在更新 \\
+    \bottomrule
+    \end{tabular}
+\end{table}
+
+其中，\verb|id| 为自增主键，用于唯一标识每条记录；\verb|version|，\verb|board|，\verb|domain| 字段联合作为唯一性约束，以保证同一版本、单板和领域的数据不会重复；\verb|admins| 存储领域管理员列表，只有管理员才能操作该领域的配置界面，包括配置解析参数和触发覆盖率解析；\verb|owner| 存储领域责任人，负责组织该领域的软件开发与测试工作；\verb|base_commit| 存储基准提交节点，作为增量覆盖率解析的基线；\verb|modules_info| 存储用户配置的模块信息；\verb|exclude_files|记录需要在覆盖率统计中排除的文件路径列表；\verb|exclude_funcs|记录需要在覆盖率统计中排除的函数名称或通配符表达式列表；\verb|bin_file| 记录二进制文件相关信息，如可执行文件路径、镜像信息等，供 LLVM 工具链覆盖率解析使用；\verb|last_modified|记录当前领域最新的覆盖率记录采集时间；\verb|updating|标记当前领域的最新记录是否处于参数更新或覆盖率重解析过程中，用于并发控制和前端状态提示。
+
+\subsection{主要算法设计}
+为保证存储空间合理使用并维持数据整洁，数据存储模块提供过期数据清理功能。系统根据数据采集时间或版本策略自动删除超过保存周期的数据库记录及对应静态覆盖率报告文件，从而实现数据的生命周期管理。
+
+过期数据清理算法伪代码如算法~\ref{algo:5.12}所示。算法在写入新数据时，自动识别并删除超出保留周期的静态覆盖率文件及其对应的数据库记录，从而确保存储空间的合理使用，同时维护数据一致性和完整性。
+
+\begin{algorithm}[ht]
+\caption{数据存储-过期数据清理算法}
+\label{algo:5.12}
+\KwIn{静态文件目录根路径 \texttt{ROOT\_DIR}}
+\KwOut{删除过期静态文件及数据库记录}
+
+\ForEach{\texttt{ROOT\_DIR} 下的日期目录 \texttt{DATE\_DIR}}{
+    获取当日时间 \texttt{today} \;
+    \If{\texttt{DATE\_DIR} 在 \texttt{today} 前两个月内}{
+        continue \tcp*{未过期，跳过}
+    }
+    \ForEach{\texttt{DATE\_DIR} 下的 domain 目录 {DOMAIN\_DIR}}{
+        查询 Extra 表中该 domain 的最新覆盖率记录时间 \texttt{last\_modified} \;
+        \eIf{\texttt{last\_modified} 在 \texttt{DATE\_DIR} 日期之后}{
+            \tcp{该 domain 在当前日期之后已有更新，已过期}
+            删除 domain 目录下所有静态文件 \;
+            删除 Coverage 表中对应记录 \;
+        }{
+           continue \tcp*{该记录为最后一次覆盖率记录，保留}
+        }
+    }
+}
+\end{algorithm}
+
+算法首先遍历 \verb|ROOT_DIR| 下按日期组织的子目录 \verb|DATE_DIR|。每个日期目录存储了该日期采集的覆盖率数据文件。对每个 \verb|DATE_DIR|，算法获取当前日期 \verb|today|，并判断目录日期是否位于当前时间前两个月内。若在两个月内，则数据未过期，跳过当前日期目录。
+
+若目录日期在当前时间两个月之前，则进行过期数据清理。但是，可能存在上一个版本的数据一直未更新，但是为了实现版本间覆盖率比较，需要保留这些旧数据，因此，遍历日期目录中的领域子目录 \verb|DOMAIN_DIR|。每个子目录对应覆盖率数据中的一个领域（domain）。从 Extra 表中查询对应领域的覆盖率记录的最后更新时间 \verb|last_modified|，与目录日期进行比较，若\verb|last_modified|在目录日期之前，则说明该目录中已经是最新的数据，应保留，跳过该领域目录，继续检查下一个领域。若\verb|last_modified|在目录日期之后，说明该领域在目录日期之后已有新的覆盖率数据更新，当前目录中的静态文件属于过期数据，需要删除静态资源，并删除 Coverage 表中对应的记录。
+
+算法重复上述步骤，直到 \verb|ROOT_DIR| 下所有日期目录及其领域子目录均被检查完毕。整个过程在写入新数据时自动触发，实现了覆盖率数据的周期性清理和生命周期管理。
+
+
+\section{SmartCI平台集成方法}
+为了实现覆盖率采集、分析与可视化流程的自动化，本项目将相关功能集成至公司内部的 SmartCI 平台。SmartCI 平台采用基于 XML 的配置机制，包括两类核心配置文件：
+
+\begin{itemize}
+    \item \verb|task.xml|：用于定义单条可执行命令的任务单元，实现基础任务封装。
+    \item \verb|project.xml|：用于定义任务执行流程，可顺序调用多个任务以构建完整的流水线。
+\end{itemize}
+
+当配置文件推送至 SmartCI 平台后，平台能够自动检测新的任务配置，支持在平台的用户界面中手动触发任务或在\verb|project.xml| 中预设定时策略自动执行。同时，SmartCI 平台支持分布式任务调度，可将同一项目的不同任务并发分发至多个节点执行，从而满足大规模自动化构建和测试的需求。
+
+在本项目中，覆盖率采集、分析与可视化模块被嵌入到现有的 SmartCI 冒烟测试流水线中。具体实现如下：
+
+\begin{enumerate}
+    \item 将细粒度分析模块中的解析任务层脚本包装为一个任务单元；
+    \item 在冒烟测试流水线的 task 中添加覆盖率采集相关执行脚本；
+    \item 在冒烟测试流水线的 project 中，添加覆盖率解析的 task，实现每次冒烟测试触发时，SmartCI 自动执行新增的覆盖率任务模块。
+    \item 通过分布式执行机制，平台能够同时处理多个单板或领域的覆盖率数据，实现高效的数据采集与分析。
+\end{enumerate}
+
+该集成方案确保覆盖率采集与分析流程与现有测试流水线无缝衔接，实现从测试触发到数据可视化的全流程自动化，显著提升了软件质量保障的自动化水平和系统可靠性。
+
+\section{本章小结}
+本章系统地阐述了多维度覆盖率融合显示系统的详细设计与实现。系统由覆盖率采集、细粒度分析、覆盖率可视化、数据存储及 SmartCI 集成模块构成，各模块协同工作，实现覆盖率数据从采集、分析到展示的全流程自动化。
+
+覆盖率采集模块通过插桩技术结合跨OS的共享内存通信，实现异构操作系统架构下的覆盖率完整采集；细粒度分析模块支持多维度覆盖率的分层统计，增量覆盖率的计算，以及不同时间维度下覆盖率对比与趋势分析，确保分析结果的精确性；可视化模块采用 Vue.js 组件化架构，提供多维度筛选和交互式展示；数据存储模块通过 MySQL 与静态文件管理，实现数据持久化及过期数据清理；SmartCI 集成模块将覆盖率任务嵌入自动化测试流水线，实现从任务触发到可视化结果更新的端到端自动化。

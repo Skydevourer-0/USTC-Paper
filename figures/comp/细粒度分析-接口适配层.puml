@@ -1,0 +1,73 @@
+@startuml 细粒度分析-接口适配层
+skinparam Linetype ortho
+
+' API 层
+class coverage.api.conf.ConfApi {}
+get ()- coverage.api.conf.ConfApi
+post ()- coverage.api.conf.ConfApi
+
+class coverage.api.data.DataApi {}
+get ()- coverage.api.data.DataApi
+post ()- coverage.api.data.DataApi
+
+' Model 层
+class coverage.model.Coverage {
+    +id: int
+    +version: str
+    +board: str
+    +domain: str
+    +module: str
+    +collect_time: datetime
+    +curr_commit: str
+    +data: dict
+    +workpath: Path
+    +parse_html() : dict
+}
+class coverage.model.Extra {
+    +id: int
+    +version: str
+    +board: str
+    +domain: str
+    +admins: dict
+    +base_commit: str
+    +modules_info: dict
+    +exclude_files: list
+    +exclude_funcs: dict
+    +bin_file: dict
+    +last_modified: datetime
+    +updating: bool
+    +owner: str
+}
+
+' 工具/处理层
+class coverage.utils.Utils {
+    -_model_map: dict[str, type]
+    -_build_by_smartci(record: Coverage) : None
+    -_get_update_fields(new_record: Coverage | Extra, old_record: Coverage | Extra) : dict[str, Any]
+    -_update_data(record: Coverage) : None
+    -_upsert_record(model_name: str, record: Coverage | Extra, unique_fields: list[str]) : tuple[Coverage | Extra, bool]
+    +update_conf(record: Extra) : None
+    +build_info(record: Coverage) : None
+    +build_modules(record: Coverage) : None
+    +build_model_record(model_name: str, args: dict[str, Any]) : Any
+    +get_model_records(model_name: str, args: dict[str, Any]) : list[Any]
+}
+
+' Service 层
+class coverage.service.smartci_project.SmartCI {
+    +start_project(rparams: dict[str, Any]) : None
+    +build_info(project_id: int) : str
+}
+
+
+' API 层依赖 Model 和工具
+coverage.api.conf.ConfApi --> coverage.utils.Utils : uses
+coverage.api.data.DataApi --> coverage.utils.Utils : uses
+
+' 工具依赖 Model 和 Service 层
+coverage.utils.Utils --> coverage.model.Coverage : uses
+coverage.utils.Utils --> coverage.model.Extra : uses
+coverage.utils.Utils --> coverage.service.smartci_project.SmartCI : uses
+
+hide @unlinked
+@enduml

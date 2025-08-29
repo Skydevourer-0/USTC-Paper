@@ -1,0 +1,17 @@
+@startuml 功能模块交互-用户查看数据
+actor "用户" as User
+
+participant "覆盖率可视化模块" as Dashboard
+participant "数据存储模块" as Storage
+
+User -> Dashboard: 查看覆盖率看板
+activate Dashboard
+Dashboard -> Storage: 查询覆盖率数据和报告
+activate Storage
+Storage --> Dashboard: 返回数据和报告
+deactivate Storage
+Dashboard -> Dashboard: 构造可视化界面
+Dashboard -> User: 展示覆盖率可视化
+deactivate Dashboard
+
+@enduml

@@ -1,0 +1,45 @@
+@startuml 细粒度分析-解析任务层
+skinparam Linetype ortho
+
+' 工具/处理层
+class coverage.parse_info.Utils {
+    +get_extra_field(rparams: dict, field: str) : str
+    +get_warnings(rparams: dict): Path
+}
+class coverage.parse_info.InfoExcluder {
+    -_func_lines(src: Path, func_def: list, func_call: list) : set
+    -_exclude_files(rparams: dict, total_info: Path) : Path
+    -_exclude_funcs(rparams: dict, total_info: Path) : Path
+    +exclude_info(rparams: dict, total_info: Path) : Path
+}
+class coverage.parse_info.IncParser {
+    -_prefix_depth: int
+    -_total_info: Path
+    -_rparams: dict
+    -_get_sf_files() : list
+    -_get_common_ancestors(sf_files: list) : list
+    -_parse_git_diff(ancestor: str) : dict
+    -_collect_inc_code() : dict
+    -_build_info(inc: dict, output: Path) : None
+    +run(output_info: Path) : None
+}
+class coverage.parse_info.InfoProcessor {
+    -_llvm_profdata: str
+    -_llvm_cov: str
+    -_extract(rparams: dict) : bool
+    -_merge_raw(raw_path: Path) : Path
+    -_build_modules(rparams: dict, total_info: Path) : None
+    -_build_total(rparams: dict) : Path
+    +build_info(rparams: dict) : None
+}
+
+' 工具/处理层依赖
+coverage.parse_info.InfoProcessor --> coverage.parse_info.InfoExcluder : uses
+coverage.parse_info.InfoProcessor --> coverage.parse_info.IncParser : uses
+coverage.parse_info.InfoProcessor --> coverage.parse_info.Utils : uses
+coverage.parse_info.InfoExcluder --> coverage.parse_info.Utils : uses
+coverage.parse_info.IncParser --> coverage.parse_info.Utils : uses
+
+
+hide @unlinked
+@enduml
